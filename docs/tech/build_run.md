@@ -41,7 +41,16 @@ poetry run flight --debug
 
 - `--noise fast|simplex` (режим шума высот)
 
+## v0.3 (Final)
+Запуск:
+```bash
+poetry run flight
+```
 
-## v0.3
-- `--lod` / `--no-lod`
-- `--target-fps <int>`
+Полезно:
+- `poetry run flight --debug`
+- `poetry run flight --wireframe`
+
+Variant A:
+- шейдер упрощён ради стабильности (без процедурных контуров/шума)
+- `--lod` по умолчанию выключен (экспериментально)

@@ -40,7 +40,6 @@ uniform vec3 u_light_dir;
 uniform vec3 u_cam_pos;
 uniform float u_fog_start;
 uniform float u_fog_end;
-uniform float u_chunk_fade;
 
 out vec4 f_color;
 
@@ -62,34 +61,18 @@ void main() {
 
     vec3 base = height_color(v_height);
 
+    // Forward distance (camera moves +Z)
     float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);
 
-    float detail = 1.0 - smoothstep(200.0, 650.0, dist);
+    // Simple lighting: more ambient for readability (Variant A)
+    float ambient = 0.55;
+    vec3 col = base * (ambient + 0.90 * diff);
 
-    float amb = mix(0.44, 0.58, smoothstep(0.0, 900.0, dist));
-    vec3 col = base * (amb + 0.95 * diff);
-
-    float spacing = 7.0;
-    float hh = v_height / spacing;
-    float fracv = abs(fract(hh) - 0.5);
-    float aa = max(fwidth(hh), 0.001);
-    float width = mix(0.05, 0.16, 1.0 - detail);
-    float line = 1.0 - smoothstep(width, width + aa * 2.0, fracv);
-    col = mix(col, col * (1.0 - 0.32 * detail), line);
-
-    float macro = sin(v_world_pos.x * 0.02) * sin(v_world_pos.z * 0.02);
-    col *= (1.0 + 0.14 * macro * detail);
-
-    float slope = clamp(1.0 - n.y, 0.0, 1.0);
-    col *= (1.0 - 0.38 * slope * detail);
-
+    // Fog
     float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
     vec3 fog_col = vec3(0.70, 0.80, 0.92);
-
-    float cf = clamp(u_chunk_fade, 0.0, 1.0);
-    col = mix(fog_col, col, cf);
-
     col = mix(col, fog_col, fog_amount);
+
     f_color = vec4(col, 1.0);
 }"""
 

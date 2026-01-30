@@ -1,20 +1,17 @@
 # База знаний (индекс)
 
-- PM
-  - `/docs/pm/prd.md`
-  - `/docs/pm/roadmap.md`
-- Tech
-  - `/docs/tech/build_run.md`
-  - `/docs/tech/architecture.md`
-  - `/docs/tech/world_generation.md`
-  - `/docs/tech/rendering.md`
-  - `/docs/tech/troubleshooting.md`
+## PM
+- `/docs/pm/prd.md` — требования и критерии приёмки (актуально для v0.3)
+- `/docs/pm/roadmap.md` — дорожная карта
 
-- Tech
-  - `/docs/tech/apply_archives.md` — как применять архивы с правками
+## Tech
+- `/docs/tech/build_run.md` — установка и запуск
+- `/docs/tech/architecture.md` — архитектура модулей
+- `/docs/tech/world_generation.md` — чанки и генерация высот
+- `/docs/tech/rendering.md` — рендеринг (v0.3 Variant A baseline)
+- `/docs/tech/troubleshooting.md` — частые проблемы и решения
+- `/docs/tech/apply_archives.md` — как применять архивы с правками
 
-- Render
-  - Sky quad: небо/солнце как ориентир (см. `flight/render/renderer.py`)
-
-- World
-  - `/flight/world/lod_world.py` — двухкольцевой LOD (near/far)
+## Принципы v0.3
+- Variant A = стабильность: избегаем high-frequency procedural shading, чтобы убрать shimmer.
+- Улучшение картинки (Variant B) планируется через текстуры + корректное сглаживание/LOD.

@@ -1,3 +1,10 @@
+# Changelog
+
+## v0.3.0 (Final, Variant A: stability baseline)
+- Убраны источники мерцания (процедурные контуры/noise/мелкие детали в шейдере)
+- Зафиксирован базовый шейдер: palette-by-height + Lambert + fog (forward)
+- LOD по умолчанию выключен (можно включить флагом, но это вне стабильного baseline)
+
 # CHANGELOG (v0.1.0)
 
 ## Hotfix: macOS OpenGL context request

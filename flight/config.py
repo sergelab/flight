@@ -34,5 +34,5 @@ DEFAULT_FOG_END = FOG_END
 
 # v0.3 defaults
 DEFAULT_TARGET_FPS = 60
-DEFAULT_LOD = True
+DEFAULT_LOD = False  # v0.3 Variant A: stability baseline
 DEFAULT_NOISE = "fast"
