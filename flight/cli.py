@@ -4,7 +4,7 @@ import argparse
 import random
 
 from flight.app import run_app
-from flight.config import DEFAULT_HEIGHT_OFFSET, DEFAULT_SEED, DEFAULT_SPEED, DEFAULT_CHUNK_RES, DEFAULT_CHUNK_WORLD_SIZE, DEFAULT_FOG_START, DEFAULT_FOG_END
+from flight.config import DEFAULT_HEIGHT_OFFSET, DEFAULT_SEED, DEFAULT_SPEED, DEFAULT_CHUNK_RES, DEFAULT_CHUNK_WORLD_SIZE, DEFAULT_FOG_START, DEFAULT_FOG_END, DEFAULT_TARGET_FPS, DEFAULT_LOD, DEFAULT_NOISE
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="flight", description="Infinite flight over mountains (ModernGL + pygame)")
@@ -17,7 +17,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--fog-start", type=float, default=DEFAULT_FOG_START, help="fog start distance")
     p.add_argument("--fog-end", type=float, default=DEFAULT_FOG_END, help="fog end distance")
     p.add_argument("--debug", action="store_true", help="enable debug overlay (HUD + logs)")
-    p.add_argument("--noise", choices=["fast","simplex"], default="fast", help="height noise mode (fast or simplex)")
+    p.add_argument("--target-fps", type=int, default=DEFAULT_TARGET_FPS, help="target FPS for adaptive streaming")
+    p.add_argument("--lod", dest="lod", action="store_true", default=DEFAULT_LOD, help="enable LOD rings (default on)")
+    p.add_argument("--no-lod", dest="lod", action="store_false", help="disable LOD rings")
+    p.add_argument("--noise", choices=["fast","simplex"], default=DEFAULT_NOISE, help="height noise mode (fast or simplex)")
     return p.parse_args()
 
 def main() -> None:
@@ -33,6 +36,8 @@ def main() -> None:
         height_offset=float(args.height_offset),
         wireframe=bool(args.wireframe),
         debug=bool(args.debug),
+        target_fps=int(args.target_fps),
+        lod=bool(args.lod),
         noise_mode=str(args.noise),
         chunk_res=int(args.chunk_res),
         chunk_size=float(args.chunk_size),

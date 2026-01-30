@@ -1,4 +1,4 @@
-# flight (v0.2.2)
+# flight (v0.3.0)
 
 Графическая программа "бесконечного" полёта над гористой поверхностью.
 Рендер: ModernGL, окно/ввод: pygame. Менеджер зависимостей: Poetry.
@@ -56,3 +56,8 @@ poetry run flight --seed random --speed 25 --height-offset 18 --wireframe
 ## v0.2.2
 - Добавлен режим шума: `--noise fast|simplex`
 - Добавлено небо с "солнцем" как ориентир (Sky quad)
+
+
+### Параметры v0.3
+- `--lod` / `--no-lod`
+- `--target-fps <int>`

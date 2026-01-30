@@ -40,3 +40,8 @@ poetry run flight --debug
 - `--fog-start` / `--fog-end`
 
 - `--noise fast|simplex` (режим шума высот)
+
+
+## v0.3
+- `--lod` / `--no-lod`
+- `--target-fps <int>`

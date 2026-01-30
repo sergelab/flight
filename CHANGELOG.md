@@ -52,3 +52,9 @@
 - Добавлен `--noise fast|simplex`
 - Ускорена генерация чанков (векторизованная сетка высот)
 - Туман сделан заметнее (forward smoothstep)
+
+## v0.3.0 (A: FPS first)
+- LOD: near/high + far/low, far обновляется реже
+- Skirts по краям чанков
+- Адаптивный upload/frame по target FPS
+- CLI: --lod/--no-lod, --target-fps

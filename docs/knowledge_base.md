@@ -15,3 +15,6 @@
 
 - Render
   - Sky quad: небо/солнце как ориентир (см. `flight/render/renderer.py`)
+
+- World
+  - `/flight/world/lod_world.py` — двухкольцевой LOD (near/far)
