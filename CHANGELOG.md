@@ -47,14 +47,16 @@
 - Туман: изменён расчёт на более заметный (smoothstep по forward distance)
 - Ускорена генерация чанков: добавлен векторизованный быстрый шум и height_grid
 
-## v0.2.2 (закрытие v0.2)
-- Добавлен sky-рендер (градиент + солнце как ориентир)
-- Добавлен `--noise fast|simplex`
-- Ускорена генерация чанков (векторизованная сетка высот)
-- Туман сделан заметнее (forward smoothstep)
+## v0.3.1 (B)
+- Двухкольцевой LOD (near/far)
+- u_chunk_fade + distance-fade для сглаживания переходов и pop-in
+- CLI: --lod/--no-lod, --target-fps, --noise
 
-## v0.3.0 (A: FPS first)
-- LOD: near/high + far/low, far обновляется реже
-- Skirts по краям чанков
-- Адаптивный upload/frame по target FPS
-- CLI: --lod/--no-lod, --target-fps
+## v0.3.2 (B hotfix)
+- Исправлен fade near/far (near fade-out, far fade-in)
+- Добавлен polygon offset при рендере far для уменьшения z-fighting (мерцания)
+
+## v0.3.3 (B hotfix)
+- FAR-pass: depth_mask=False + polygon offset (устранение мерцания)
+- Шейдер: усилены контуры, добавлен процедурный detail и slope shading
+- Blend-band расширен для более мягкого перехода

@@ -1,4 +1,4 @@
-# flight (v0.3.0)
+# flight (v0.3.3)
 
 Графическая программа "бесконечного" полёта над гористой поверхностью.
 Рендер: ModernGL, окно/ввод: pygame. Менеджер зависимостей: Poetry.
@@ -53,11 +53,12 @@ poetry run flight --seed random --speed 25 --height-offset 18 --wireframe
 - Ускорена генерация чанков: векторизованное вычисление высот (быстрый value-noise)
 
 
-## v0.2.2
-- Добавлен режим шума: `--noise fast|simplex`
-- Добавлено небо с "солнцем" как ориентир (Sky quad)
+## v0.3.3 (B)
+- Добавлен двухкольцевой LOD (near/far)
+- Плавные переходы LOD за счёт distance-fade (u_chunk_fade)
+- Адаптивная подгрузка чанков под target FPS
+- CLI: `--lod/--no-lod`, `--target-fps`, `--noise`
 
 
-### Параметры v0.3
-- `--lod` / `--no-lod`
-- `--target-fps <int>`
+## v0.3.3 (B hotfix)
+- Убрано мерцание в зоне перекрытия LOD: near-fade теперь инвертирован (near виден близко) + добавлен depth bias для far.

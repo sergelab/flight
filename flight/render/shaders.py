@@ -41,6 +41,7 @@ uniform vec3 u_light_dir;
 uniform vec3 u_cam_pos;
 uniform float u_fog_start;
 uniform float u_fog_end;
+uniform float u_chunk_fade;
 
 out vec4 f_color;
 
@@ -61,7 +62,7 @@ void main() {
     float diff = max(dot(n, l), 0.0);
 
     vec3 base = height_color(v_height);
-vec3 col = base * (0.25 + 0.75 * diff);
+vec3 col = base * (0.35 + 0.85 * diff);
 
 // v0.2: subtle contour lines to make motion/relief easier to read
 float spacing = 6.0; // world units
@@ -77,7 +78,9 @@ float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
 
 // Fog color: light sky-ish
 vec3 fog_col = vec3(0.70, 0.80, 0.92);
-col = mix(col, fog_col, fog_amount);
+float cf = pow(clamp(u_chunk_fade, 0.0, 1.0), 1.8);
+    col = mix(fog_col, col, cf);
+    col = mix(col, fog_col, fog_amount);
 f_color = vec4(col, 1.0);
 }
 """

@@ -18,9 +18,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--fog-end", type=float, default=DEFAULT_FOG_END, help="fog end distance")
     p.add_argument("--debug", action="store_true", help="enable debug overlay (HUD + logs)")
     p.add_argument("--target-fps", type=int, default=DEFAULT_TARGET_FPS, help="target FPS for adaptive streaming")
-    p.add_argument("--lod", dest="lod", action="store_true", default=DEFAULT_LOD, help="enable LOD rings (default on)")
-    p.add_argument("--no-lod", dest="lod", action="store_false", help="disable LOD rings")
-    p.add_argument("--noise", choices=["fast","simplex"], default=DEFAULT_NOISE, help="height noise mode (fast or simplex)")
+    p.add_argument("--lod", dest="lod", action="store_true", default=DEFAULT_LOD, help="enable LOD (default on)")
+    p.add_argument("--no-lod", dest="lod", action="store_false", help="disable LOD")
+    p.add_argument("--noise", choices=["fast","simplex"], default=DEFAULT_NOISE, help="height noise mode")
     return p.parse_args()
 
 def main() -> None:

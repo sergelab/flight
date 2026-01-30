@@ -4,25 +4,19 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 
 import moderngl
+import numpy as np
 
-from flight.world.chunk_manager import ChunkManager, CPUChunk
+from flight.world.chunk import ChunkCPU, ChunkGPU
+from flight.world.chunk_manager import ChunkManager, ChunkWindow
+from flight.world.mesh_builder import build_indices
 
-@dataclass(frozen=True)
+@dataclass
 class WorldParams:
     chunk_res: int
     chunk_world_size: float
     chunks_x: int
     chunks_z_behind: int
     chunks_z_ahead: int
-    skirts: bool = True
-    skirt_depth: float = 80.0
-
-@dataclass
-class ChunkGPU:
-    cx: int
-    cz: int
-    vao: moderngl.VertexArray
-    vbo: moderngl.Buffer
 
 class World:
     def __init__(self, ctx: moderngl.Context, params: WorldParams, height_provider) -> None:
@@ -30,76 +24,80 @@ class World:
         self.params = params
         self.height_provider = height_provider
 
+        self.indices = build_indices(params.chunk_res)
+        self.ibo = ctx.buffer(self.indices.tobytes())
+
+        self.window = ChunkWindow(params.chunks_x, params.chunks_z_behind, params.chunks_z_ahead)
         self.cm = ChunkManager(
-            chunk_res=params.chunk_res,
-            chunk_world_size=params.chunk_world_size,
+            res=params.chunk_res,
+            world_size=params.chunk_world_size,
+            window=self.window,
             height_provider=height_provider,
-            skirts=params.skirts,
-            skirt_depth=params.skirt_depth,
         )
 
         self.chunks: Dict[Tuple[int,int], ChunkGPU] = {}
-        self._ibo: moderngl.Buffer | None = None
-        self._ibo_len = 0
 
-        self._last_center = (None, None)
-
-    def shutdown(self) -> None:
-        self.cm.shutdown()
-        for c in list(self.chunks.values()):
-            try:
-                c.vao.release()
-                c.vbo.release()
-            except Exception:
-                pass
-        self.chunks.clear()
-        try:
-            if self._ibo is not None:
-                self._ibo.release()
-        except Exception:
-            pass
-
-    def update_requests(self, x: float, z: float) -> None:
-        # Determine chunk center
-        cx0 = int(x // self.params.chunk_world_size)
-        cz0 = int(z // self.params.chunk_world_size)
-
-        if self._last_center == (cx0, cz0):
-            return
-        self._last_center = (cx0, cz0)
-
-        half = self.params.chunks_x // 2
-        for dx in range(-half, half + 1):
-            for dz in range(-self.params.chunks_z_behind, self.params.chunks_z_ahead + 1):
-                cx = cx0 + dx
-                cz = cz0 + dz
-                key = (cx, cz)
-                if key in self.chunks:
-                    continue
-                self.cm.request(cx, cz)
-
-        # Optional: could evict far-behind chunks to save VRAM (not aggressive yet)
 
     def warmup(self, prog, *, min_chunks: int = 24, timeout_s: float = 2.0) -> None:
+        """Preload some chunks into GPU so the first frame isn't empty.
+
+        Blocks briefly (<= timeout_s) while uploading chunks as they are generated.
+        """
         import time as _time
         deadline = _time.perf_counter() + float(timeout_s)
         while len(self.chunks) < int(min_chunks) and _time.perf_counter() < deadline:
-            self.ingest_ready(prog, max_per_frame=32)
-            if len(self.chunks) >= int(min_chunks):
-                break
-            _time.sleep(0.01)
+            ready = self.cm.poll_ready(max_items=1)
+            if not ready:
+                _time.sleep(0.01)
+                continue
+            for cpu in ready:
+                key = (cpu.cx, cpu.cz)
+                if key in self.chunks:
+                    continue
+                vbo = self.ctx.buffer(cpu.vbo_data.tobytes())
+                vao = self.ctx.vertex_array(
+                    prog,
+                    [
+                        (vbo, "3f 3f", "in_pos", "in_norm"),
+                    ],
+                    self.ibo,
+                )
+                self.chunks[key] = ChunkGPU(cx=cpu.cx, cz=cpu.cz, vao=vao, vbo=vbo)
 
-    def ingest_ready(self, prog, *, max_per_frame: int = 8) -> None:
-        ready = self.cm.poll_ready(max_items=int(max_per_frame))
+    def shutdown(self) -> None:
+        self.cm.shutdown()
+        for ch in self.chunks.values():
+            try:
+                ch.vao.release()
+                ch.vbo.release()
+            except Exception:
+                pass
+        try:
+            self.ibo.release()
+        except Exception:
+            pass
+
+    def update_requests(self, cam_x: float, cam_z: float) -> None:
+        cam_cx, cam_cz = self.cm.world_to_chunk(cam_x, cam_z)
+        needed = self.cm.needed_chunks(cam_cx, cam_cz)
+        existing = set(self.chunks.keys())
+
+        # Evict chunks outside window
+        for key in list(self.chunks.keys()):
+            if key not in needed:
+                ch = self.chunks.pop(key)
+                ch.vao.release()
+                ch.vbo.release()
+
+        # Request missing
+        self.cm.request_missing(needed, set(self.chunks.keys()))
+
+    def ingest_ready(self, prog, max_per_frame: int = 2) -> None:
+        ready = self.cm.poll_ready(max_items=max_per_frame)
         for cpu in ready:
             key = (cpu.cx, cpu.cz)
-            self.cm.pending.discard(key)
             if key in self.chunks:
                 continue
-
-            if self._ibo is None:
-                self._ibo = self.ctx.buffer(cpu.ibo_data.tobytes())
-                self._ibo_len = int(cpu.ibo_data.size)
 
             vbo = self.ctx.buffer(cpu.vbo_data.tobytes())
             vao = self.ctx.vertex_array(
@@ -107,11 +105,21 @@ class World:
                 [
                     (vbo, "3f 3f", "in_pos", "in_norm"),
                 ],
-                self._ibo,
+                self.ibo,
             )
             self.chunks[key] = ChunkGPU(cx=cpu.cx, cz=cpu.cz, vao=vao, vbo=vbo)
 
-    def draw(self, renderer) -> None:
-        # Simple draw order: just draw all
-        for c in self.chunks.values():
-            renderer.draw_chunk(c.vao)
+    def draw(self, renderer, *, cam_z: float, fade_from: float = 0.0, fade_to: float = 0.0, invert: bool = False) -> None:
+        for ch in self.chunks.values():
+            if fade_to > fade_from:
+                cz_center = (ch.cz + 0.5) * self.params.chunk_world_size
+                dist = max(cz_center - float(cam_z), 0.0)
+                x = max(0.0, min(1.0, (dist - fade_from) / (fade_to - fade_from)))
+                t = x * x * (3.0 - 2.0 * x)  # smoothstep
+                fade = (1.0 - t) if invert else t
+                renderer.set_chunk_fade(fade)
+            else:
+                renderer.set_chunk_fade(1.0)
+            renderer.draw_chunk(ch.vao)
+        renderer.set_chunk_fade(1.0)
+

@@ -7,8 +7,8 @@ import moderngl
 
 from flight.config import (
     WINDOW_WIDTH, WINDOW_HEIGHT, FPS_CAP,
-    CHUNKS_X, CHUNKS_Z_BEHIND, CHUNKS_Z_AHEAD,
-    HEIGHT_SMOOTH_K, LIGHT_DIR,
+    CHUNK_RES, CHUNK_WORLD_SIZE, CHUNKS_X, CHUNKS_Z_BEHIND, CHUNKS_Z_AHEAD,
+    HEIGHT_SMOOTH_K, FOG_START, FOG_END, LIGHT_DIR,
 )
 from flight.render.camera import CameraRail
 from flight.render.renderer import Renderer
@@ -41,16 +41,16 @@ def run_app(
     target_fps: int,
     lod: bool,
     noise_mode: str,
-    chunk_res: int,
-    chunk_size: float,
-    fog_start: float,
-    fog_end: float,
+    chunk_res: int = CHUNK_RES,
+    chunk_size: float = CHUNK_WORLD_SIZE,
+    fog_start: float = FOG_START,
+    fog_end: float = FOG_END,
 ) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.3 (seed={seed})")
+    pygame.display.set_caption(f"flight v0.3.1 (B) seed={seed}")
 
     try:
         ctx = moderngl.create_context()
@@ -71,15 +71,12 @@ def run_app(
     cam = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
     cam.z = -30.0
 
-    # LOD params (A: FPS first)
     near = WorldParams(
         chunk_res=int(chunk_res),
         chunk_world_size=float(chunk_size),
         chunks_x=int(CHUNKS_X),
         chunks_z_behind=int(CHUNKS_Z_BEHIND),
         chunks_z_ahead=int(CHUNKS_Z_AHEAD),
-        skirts=True,
-        skirt_depth=80.0,
     )
     far_res = max(16, int(chunk_res // 2))
     far = WorldParams(
@@ -88,12 +85,12 @@ def run_app(
         chunks_x=int(CHUNKS_X * 2 + 1),
         chunks_z_behind=int(CHUNKS_Z_BEHIND * 2),
         chunks_z_ahead=int(CHUNKS_Z_AHEAD * 3),
-        skirts=True,
-        skirt_depth=120.0,
     )
-    world = LODWorld(ctx, LODParams(near=near, far=far, far_update_every_n_frames=2), hp) if lod else LODWorld(ctx, LODParams(near=near, far=near, far_update_every_n_frames=999999), hp)
+    world = LODWorld(ctx, LODParams(near=near, far=far, far_update_every_n_frames=2), hp) if lod else None
+    if world is None:
+        # fallback: use near-only via LODWorld wrapper
+        world = LODWorld(ctx, LODParams(near=near, far=near, far_update_every_n_frames=999999), hp)
 
-    # Prime + warmup
     world.update_requests(cam.x, cam.z)
     world.warmup(renderer.prog, timeout_s=2.0)
 
@@ -101,18 +98,16 @@ def run_app(
     running = True
     last_t = time.perf_counter()
     start_t = last_t
-    last_log = last_t
     last_hud = last_t
+    last_log = last_t
+    fps_est = 0.0
 
     light_dir = normalize(np.array(LIGHT_DIR, dtype=np.float32))
+    target = max(15, int(target_fps))
+    max_upload = 6
 
     pygame.font.init()
     font = pygame.font.SysFont("Menlo", 16) or pygame.font.Font(None, 16)
-    fps_est = 0.0
-
-    # Adaptive streaming parameters
-    target = max(15, int(target_fps))
-    max_upload = 6  # initial guess
 
     try:
         while running:
@@ -131,14 +126,11 @@ def run_app(
                     renderer.resize(w, h)
 
             cam.update(dt, hp.height_at)
-
-            # Update requests
             world.update_requests(cam.x, cam.z)
 
-            # Adaptive upload: if FPS below target -> reduce uploads; above -> increase slightly.
             if dt > 0:
-                inst_fps = 1.0 / dt
-                fps_est = (0.9 * fps_est + 0.1 * inst_fps) if fps_est > 0 else inst_fps
+                inst = 1.0 / dt
+                fps_est = (0.9 * fps_est + 0.1 * inst) if fps_est > 0 else inst
 
             if (now - start_t) < 2.0:
                 max_upload = 10
@@ -150,18 +142,16 @@ def run_app(
 
             world.ingest_ready(renderer.prog, max_per_frame=max_upload)
 
-            # Render
             renderer.begin_frame()
 
-            # Sky (if available)
             view = cam.view_matrix()
+            # optional sky if renderer supports it
             if hasattr(renderer, "draw_sky") and hasattr(renderer, "proj"):
                 sun_world = cam.eye() + light_dir * 1000.0
                 p = np.array([sun_world[0], sun_world[1], sun_world[2], 1.0], dtype=np.float32)
                 clip = (renderer.proj @ (view @ p))
                 wv = float(clip[3]) if float(clip[3]) != 0.0 else 1.0
-                sun_ndc = (float(clip[0] / wv), float(clip[1] / wv))
-                renderer.draw_sky(sun_ndc)
+                renderer.draw_sky((float(clip[0] / wv), float(clip[1] / wv)))
 
             renderer.set_common_uniforms(
                 view=view,
@@ -170,21 +160,19 @@ def run_app(
                 fog_start=float(fog_start),
                 fog_end=float(fog_end),
             )
-            world.draw(renderer)
+            world.draw(renderer, cam_z=cam.z, chunk_size=float(chunk_size))
 
-            # HUD/logs
             if debug and hasattr(renderer, "hud_update_rgba") and hasattr(renderer, "draw_hud"):
                 if now - last_hud >= 0.12:
                     last_hud = now
                     pending_near = len(getattr(world.near.cm, "pending", []))
                     pending_far = len(getattr(world.far.cm, "pending", []))
                     lines = [
-                        "flight v0.3 (A: FPS first)",
-                        f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target}",
-                        f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}",
+                        "flight v0.3.1 (B: smoother)",
+                        f"lod={'on' if lod else 'off'} noise={noise_mode} target_fps={target}",
+                        f"fps~{fps_est:.0f} upload/frame={max_upload} fog={fog_start:.0f}->{fog_end:.0f}",
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
                         f"far:  res={far.chunk_res} chunks={len(world.far.chunks)} pending={pending_far}",
-                        f"fog={fog_start:.0f}->{fog_end:.0f} chunk_size={chunk_size:.1f}",
                     ]
                     pad = 6
                     line_h = font.get_linesize()
@@ -206,7 +194,6 @@ def run_app(
                     print(f"[flight] fps~{fps_est:.0f} upload={max_upload} near_chunks={len(world.near.chunks)} far_chunks={len(world.far.chunks)}")
 
             pygame.display.flip()
-
             if FPS_CAP and FPS_CAP > 0:
                 clock.tick(FPS_CAP)
             else:
