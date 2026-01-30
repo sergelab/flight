@@ -10,7 +10,7 @@ from flight.config import (
     CHUNKS_X, CHUNKS_Z_BEHIND, CHUNKS_Z_AHEAD,
     HEIGHT_SMOOTH_K, LIGHT_DIR,
 )
-from flight.render.camera import CameraRail, CameraYaw
+from flight.render.camera import CameraRail, CameraFlight
 from flight.render.renderer import Renderer
 from flight.world.height import HeightProvider
 from flight.world.world import WorldParams
@@ -54,7 +54,7 @@ def run_app(
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.8.0 (seed={seed})")
+    pygame.display.set_caption(f"flight v0.8.2 (seed={seed})")
 
     try:
         ctx = moderngl.create_context()
@@ -72,11 +72,13 @@ def run_app(
     renderer = Renderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
 
     hp = HeightProvider(seed=seed, mode=str(noise_mode))
+    # Camera
     if auto:
-        cam = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
+        cam: CameraRail | CameraFlight = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
+        cam.z = -30.0
     else:
-        cam = CameraYaw(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K, turn_rate=turn_rate)
-    cam.z = -30.0
+        cam = CameraFlight(speed=speed, turn_rate=turn_rate, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
+        cam.z = -30.0
 
     # LOD params (A: FPS first)
     near = WorldParams(
@@ -141,14 +143,25 @@ def run_app(
                     pygame.display.set_mode((w, h), flags)
                     renderer.resize(w, h)
 
-            if auto:
-                cam.update(dt, hp.height_at)
-            else:
+            # Controls
+            if isinstance(cam, CameraFlight):
                 keys = pygame.key.get_pressed()
-                move_axis = float(keys[pygame.K_UP]) - float(keys[pygame.K_DOWN])
-                # Left = turn left, Right = turn right
-                turn_axis = float(keys[pygame.K_RIGHT]) - float(keys[pygame.K_LEFT])
-                cam.update(dt, hp.height_at, move_axis=move_axis, turn_axis=turn_axis)
+                fwd = 0.0
+                if keys[pygame.K_UP]:
+                    fwd += 1.0
+                if keys[pygame.K_DOWN]:
+                    fwd -= 1.0
+
+                # NOTE: right must turn right, left must turn left
+                turn = 0.0
+                if keys[pygame.K_LEFT]:
+                    turn -= 1.0
+                if keys[pygame.K_RIGHT]:
+                    turn += 1.0
+
+                cam.update(dt, hp.height_at, forward=fwd, turn=turn)
+            else:
+                cam.update(dt, hp.height_at)
 
             # Update requests
             world.update_requests(cam.x, cam.z)
@@ -198,9 +211,8 @@ def run_app(
                     pending_near = len(getattr(world.near.cm, "pending", []))
                     pending_far = len(getattr(world.far.cm, "pending", []))
                     lines = [
-                        "flight v0.8.0 (trees variant C)",
-                        f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target}",
-                        f"controls={'auto' if auto else 'arrows'} speed={speed:.1f} turn_rate={turn_rate:.2f}",
+                        "flight v0.8.2 (trees variant C)",
+                        f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target} auto={'on' if auto else 'off'}",
                         f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}",
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
                         f"far:  res={far.chunk_res} chunks={len(world.far.chunks)} pending={pending_far}",

@@ -33,14 +33,30 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--fog-end", type=float, default=DEFAULT_FOG_END, help="fog end distance")
     p.add_argument("--debug", action="store_true", help="enable debug overlay (HUD + logs)")
     p.add_argument("--target-fps", type=int, default=DEFAULT_TARGET_FPS, help="target FPS for adaptive streaming")
-    p.add_argument("--lod", dest="lod", action="store_true", default=DEFAULT_LOD, help="enable LOD rings (default off)")
+    p.add_argument(
+        "--lod",
+        dest="lod",
+        action="store_true",
+        default=DEFAULT_LOD,
+        help="enable LOD rings (default off)",
+    )
     p.add_argument("--no-lod", dest="lod", action="store_false", help="disable LOD rings")
     p.add_argument("--noise", choices=["fast","simplex"], default=DEFAULT_NOISE, help="height noise mode (fast or simplex)")
     p.add_argument("--trees", dest="trees", action="store_true", default=DEFAULT_TREES, help="enable forests (3D trees) (default on)")
     p.add_argument("--no-trees", dest="trees", action="store_false", help="disable forests (3D trees)")
     p.add_argument("--tree-density", type=float, default=DEFAULT_TREE_DENSITY, help="tree density multiplier (default 1.0)")
-    p.add_argument("--auto", action="store_true", default=DEFAULT_AUTO, help="auto forward flight (like previous versions)")
-    p.add_argument("--turn-rate", type=float, default=DEFAULT_TURN_RATE, help="turn rate in radians/sec for manual flight")
+    p.add_argument(
+        "--auto",
+        action="store_true",
+        default=DEFAULT_AUTO,
+        help="auto-flight forward (no manual controls) (default off)",
+    )
+    p.add_argument(
+        "--turn-rate",
+        type=float,
+        default=DEFAULT_TURN_RATE,
+        help="yaw turn rate (rad/sec) for manual controls",
+    )
     return p.parse_args()
 
 def main() -> None:

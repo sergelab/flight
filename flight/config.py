@@ -11,6 +11,11 @@ DEFAULT_SPEED = 20.0
 DEFAULT_HEIGHT_OFFSET = 15.0
 HEIGHT_SMOOTH_K = 8.0  # larger = faster follow
 
+# Controls
+# v0.8: manual flight controls (arrow keys)
+DEFAULT_AUTO = False
+DEFAULT_TURN_RATE = 1.8  # rad/sec
+
 # Terrain / chunks
 CHUNK_WORLD_SIZE = 64.0
 CHUNK_RES = 64  # vertices per side
@@ -40,11 +45,3 @@ DEFAULT_NOISE = "fast"
 # v0.7 defaults: forests (variant C)
 DEFAULT_TREES = True
 DEFAULT_TREE_DENSITY = 1.0
-
-# Controls
-# By default we start in manual mode (arrow keys). Use --auto to restore the
-# previous behaviour: constant forward motion.
-DEFAULT_AUTO = False
-
-# Rotation speed for manual controls (radians / second).
-DEFAULT_TURN_RATE = 1.8
