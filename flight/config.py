@@ -25,3 +25,9 @@ FAR = 800.0
 FOG_START = 150.0
 FOG_END = 600.0
 LIGHT_DIR = (0.35, 0.9, 0.2)  # will be normalized in shader
+
+# v0.2: tunables (can be overridden via CLI)
+DEFAULT_CHUNK_RES = CHUNK_RES
+DEFAULT_CHUNK_WORLD_SIZE = CHUNK_WORLD_SIZE
+DEFAULT_FOG_START = FOG_START
+DEFAULT_FOG_END = FOG_END

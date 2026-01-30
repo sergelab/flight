@@ -19,10 +19,10 @@ class WorldParams:
     chunks_z_ahead: int
 
 class World:
-    def __init__(self, ctx: moderngl.Context, params: WorldParams, height_fn) -> None:
+    def __init__(self, ctx: moderngl.Context, params: WorldParams, height_provider) -> None:
         self.ctx = ctx
         self.params = params
-        self.height_fn = height_fn
+        self.height_provider = height_provider
 
         self.indices = build_indices(params.chunk_res)
         self.ibo = ctx.buffer(self.indices.tobytes())
@@ -32,7 +32,7 @@ class World:
             res=params.chunk_res,
             world_size=params.chunk_world_size,
             window=self.window,
-            height_fn=height_fn,
+            height_provider=height_provider,
         )
 
         self.chunks: Dict[Tuple[int,int], ChunkGPU] = {}

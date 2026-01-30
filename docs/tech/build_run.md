@@ -32,3 +32,9 @@ poetry run flight
 ```bash
 poetry run flight --debug
 ```
+
+
+## Параметры мира (v0.2)
+- `--chunk-res`
+- `--chunk-size`
+- `--fog-start` / `--fog-end`

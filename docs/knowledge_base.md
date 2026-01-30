@@ -9,3 +9,6 @@
   - `/docs/tech/world_generation.md`
   - `/docs/tech/rendering.md`
   - `/docs/tech/troubleshooting.md`
+
+- Tech
+  - `/docs/tech/apply_archives.md` — как применять архивы с правками

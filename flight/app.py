@@ -31,12 +31,12 @@ def _surface_to_rgba_bytes(surf: pygame.Surface) -> tuple[bytes, int, int]:
     data = pygame.image.tostring(s, "RGBA", False)
     return data, w, h
 
-def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, debug: bool) -> None:
+def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, debug: bool, chunk_res: int, chunk_size: float, fog_start: float, fog_end: float) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.1 (seed={seed})")
+    pygame.display.set_caption(f"flight v0.2 (seed={seed})")
 
     try:
         ctx = moderngl.create_context()
@@ -63,13 +63,13 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, d
     world = World(
         ctx,
         WorldParams(
-            chunk_res=CHUNK_RES,
-            chunk_world_size=CHUNK_WORLD_SIZE,
+            chunk_res=int(chunk_res),
+            chunk_world_size=float(chunk_size),
             chunks_x=CHUNKS_X,
             chunks_z_behind=CHUNKS_Z_BEHIND,
             chunks_z_ahead=CHUNKS_Z_AHEAD,
         ),
-        hp.height_at,
+        hp,
     )
 
     # Prime requests and warmup
@@ -118,8 +118,8 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, d
                 view=cam.view_matrix(),
                 cam_pos=cam.eye(),
                 light_dir=light_dir,
-                fog_start=FOG_START,
-                fog_end=FOG_END,
+                fog_start=fog_start,
+                fog_end=fog_end,
             )
             world.draw(renderer)
 
@@ -131,7 +131,7 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, d
                     last_hud = now
                     pending_n = len(getattr(world.cm, "pending", []))
                     lines = [
-                        "flight v0.1 (debug)",
+                        "flight v0.2 (debug)",
                         f"seed={seed}  speed={speed:.1f}  offset={height_offset:.1f}",
                         f"z={cam.z:.1f}  y={cam.y:.1f}  fps~{fps_est:.0f}",
                         f"chunks_gpu={len(world.chunks)}  pending={pending_n}  upload/frame={max_upload}",

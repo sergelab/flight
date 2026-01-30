@@ -17,13 +17,13 @@ class ChunkWindow:
     z_ahead: int
 
 class ChunkWorker(threading.Thread):
-    def __init__(self, task_q: "queue.Queue[tuple[int,int]]", out_q: "queue.Queue[ChunkCPU]", *, res: int, world_size: float, height_fn) -> None:
+    def __init__(self, task_q: "queue.Queue[tuple[int,int]]", out_q: "queue.Queue[ChunkCPU]", *, res: int, world_size: float, height_provider) -> None:
         super().__init__(daemon=True)
         self.task_q = task_q
         self.out_q = out_q
         self.res = int(res)
         self.world_size = float(world_size)
-        self.height_fn = height_fn
+        self.height_provider = height_provider
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -36,23 +36,23 @@ class ChunkWorker(threading.Thread):
             except queue.Empty:
                 continue
             try:
-                pos, norm = build_chunk_vertices(cx, cz, self.res, self.world_size, self.height_fn)
+                pos, norm = build_chunk_vertices(cx, cz, self.res, self.world_size, self.height_provider)
                 interleaved = np.concatenate([pos, norm], axis=1).astype(np.float32).reshape(-1)
                 self.out_q.put(ChunkCPU(cx=cx, cz=cz, vbo_data=interleaved))
             finally:
                 self.task_q.task_done()
 
 class ChunkManager:
-    def __init__(self, *, res: int, world_size: float, window: ChunkWindow, height_fn) -> None:
+    def __init__(self, *, res: int, world_size: float, window: ChunkWindow, height_provider) -> None:
         self.res = int(res)
         self.world_size = float(world_size)
         self.window = window
-        self.height_fn = height_fn
+        self.height_provider = height_provider
 
         self.task_q: "queue.Queue[tuple[int,int]]" = queue.Queue()
         self.out_q: "queue.Queue[ChunkCPU]" = queue.Queue()
 
-        self.worker = ChunkWorker(self.task_q, self.out_q, res=self.res, world_size=self.world_size, height_fn=self.height_fn)
+        self.worker = ChunkWorker(self.task_q, self.out_q, res=self.res, world_size=self.world_size, height_provider=self.height_provider)
         self.worker.start()
 
         self.pending: Set[Tuple[int,int]] = set()
