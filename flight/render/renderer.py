@@ -57,20 +57,8 @@ void main() {
 }
 """
 
-from flight.render.textures import build_terrain_textures
-
-
 class Renderer:
-    def __init__(
-        self,
-        ctx: moderngl.Context,
-        width: int,
-        height: int,
-        *,
-        seed: int,
-        use_textures: bool,
-        tex_scale: float,
-    ) -> None:
+    def __init__(self, ctx: moderngl.Context, width: int, height: int) -> None:
         self.ctx = ctx
         self.width = width
         self.height = height
@@ -80,16 +68,8 @@ class Renderer:
 
         self._proj = perspective(70.0, width / height, 0.1, 800.0).astype(np.float32)
         self.prog["u_proj"].write(self._proj.tobytes())
-        # v0.4: terrain textures (small tile textures with mipmaps)
-        self._t_grass, self._t_rock = build_terrain_textures(self.ctx, seed=int(seed), size=256)
-        self._t_grass.use(location=0)
-        self._t_rock.use(location=1)
-        self.prog["u_tex_grass"].value = 0
-        self.prog["u_tex_rock"].value = 1
-        self.prog["u_tex_scale"].value = float(tex_scale)
-        self.prog["u_use_textures"].value = 1.0 if bool(use_textures) else 0.0
-
-        self.prog["u_chunk_fade"].value = 1.0
+        if "u_chunk_fade" in self.prog:
+            self.prog["u_chunk_fade"].value = 1.0
 
         self.ctx.enable(moderngl.DEPTH_TEST)
         self.ctx.disable(moderngl.CULL_FACE)
@@ -131,12 +111,6 @@ class Renderer:
                 obj.release()
             except Exception:
                 pass
-        for t in [getattr(self, "_t_grass", None), getattr(self, "_t_rock", None)]:
-            try:
-                if t is not None:
-                    t.release()
-            except Exception:
-                pass
         try:
             if self._hud_tex is not None:
                 self._hud_tex.release()
@@ -149,7 +123,8 @@ class Renderer:
         self.ctx.viewport = (0, 0, width, height)
         self._proj = perspective(70.0, width / height, 0.1, 800.0).astype(np.float32)
         self.prog["u_proj"].write(self._proj.tobytes())
-        self.prog["u_chunk_fade"].value = 1.0
+        if "u_chunk_fade" in self.prog:
+            self.prog["u_chunk_fade"].value = 1.0
 
     def begin_frame(self) -> None:
         # Clear is mostly hidden by sky quad, but keep for safety
@@ -161,10 +136,21 @@ class Renderer:
         self._sky_vao.render(mode=moderngl.TRIANGLE_STRIP)
         self.ctx.enable(moderngl.DEPTH_TEST)
 
-    def set_common_uniforms(self, view: np.ndarray, cam_pos: np.ndarray, light_dir: np.ndarray, fog_start: float, fog_end: float) -> None:
+    def set_common_uniforms(
+        self,
+        view: np.ndarray,
+        cam_pos: np.ndarray,
+        light_dir: np.ndarray,
+        fog_start: float,
+        fog_end: float,
+        *,
+        time_s: float = 0.0,
+    ) -> None:
         self.prog["u_view"].write(view.astype(np.float32).tobytes())
         self.prog["u_cam_pos"].value = (float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2]))
         self.prog["u_light_dir"].value = (float(light_dir[0]), float(light_dir[1]), float(light_dir[2]))
+        if "u_time" in self.prog:
+            self.prog["u_time"].value = float(time_s)
         self.prog["u_fog_start"].value = float(fog_start)
         self.prog["u_fog_end"].value = float(fog_end)
         if "u_chunk_fade" in self.prog:
@@ -175,7 +161,7 @@ class Renderer:
             self.prog["u_chunk_fade"].value = float(fade)
 
     def draw_chunk(self, vao: moderngl.VertexArray) -> None:
-        vao.render()
+            vao.render()
 
     # --- HUD ---
     def hud_update_rgba(self, rgba_bytes: bytes, w: int, h: int) -> None:

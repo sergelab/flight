@@ -45,15 +45,12 @@ def run_app(
     chunk_size: float,
     fog_start: float,
     fog_end: float,
-    textures: bool,
-    tex_scale: float,
-    far_fade: float,
 ) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.4 (seed={seed})")
+    pygame.display.set_caption(f"flight v0.5.2 (seed={seed})")
 
     try:
         ctx = moderngl.create_context()
@@ -68,14 +65,7 @@ def run_app(
     if wireframe:
         ctx.wireframe = True
 
-    renderer = Renderer(
-        ctx,
-        WINDOW_WIDTH,
-        WINDOW_HEIGHT,
-        seed=int(seed),
-        use_textures=bool(textures),
-        tex_scale=float(tex_scale),
-    )
+    renderer = Renderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
 
     hp = HeightProvider(seed=seed, mode=str(noise_mode))
     cam = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
@@ -179,8 +169,9 @@ def run_app(
                 light_dir=light_dir,
                 fog_start=float(fog_start),
                 fog_end=float(fog_end),
+                time_s=float(now - start_t),
             )
-            world.draw(renderer, far_fade=float(far_fade))
+            world.draw(renderer)
 
             # HUD/logs
             if debug and hasattr(renderer, "hud_update_rgba") and hasattr(renderer, "draw_hud"):
@@ -189,14 +180,13 @@ def run_app(
                     pending_near = len(getattr(world.near.cm, "pending", []))
                     pending_far = len(getattr(world.far.cm, "pending", []))
                     lines = [
-                        "flight v0.4 (B: textures + product LOD)",
+                        "flight v0.5.2 (A: FPS first)",
                         f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target}",
                         f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}",
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
                         f"far:  res={far.chunk_res} chunks={len(world.far.chunks)} pending={pending_far}",
                         f"fog={fog_start:.0f}->{fog_end:.0f} chunk_size={chunk_size:.1f}",
                         f"water_level={getattr(hp, 'water_level', 0.0):.1f}",
-                        f"textures={'on' if textures else 'off'} tex_scale={float(tex_scale):.3f} far_fade={float(far_fade):.2f}",
                     ]
                     pad = 6
                     line_h = font.get_linesize()

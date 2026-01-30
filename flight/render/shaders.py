@@ -42,14 +42,9 @@ in float v_water;
 
 uniform vec3 u_light_dir;
 uniform vec3 u_cam_pos;
+uniform float u_time;
 uniform float u_fog_start;
 uniform float u_fog_end;
-uniform float u_chunk_fade;
-
-uniform sampler2D u_tex_grass;
-uniform sampler2D u_tex_rock;
-uniform float u_tex_scale;
-uniform float u_use_textures;
 
 out vec4 f_color;
 
@@ -64,6 +59,24 @@ vec3 height_color(float h) {
     return mix(a, high, t2);
 }
 
+vec3 sky_color(vec3 dir) {
+    // Approximate the sky quad: horizon -> zenith
+    vec3 horizon = vec3(0.78, 0.86, 0.96);
+    vec3 zenith  = vec3(0.40, 0.60, 0.85);
+    float t = smoothstep(-0.05, 0.85, dir.y);
+    return mix(horizon, zenith, t);
+}
+
+float wave_height(vec2 p) {
+    // Low-frequency, stable water ripples (no shimmer).
+    float t = u_time;
+    float w = 0.0;
+    w += sin(dot(p, vec2(0.010, 0.015)) * 6.283 + t * 0.9) * 0.60;
+    w += sin(dot(p, vec2(-0.017, 0.008)) * 6.283 + t * 1.2) * 0.35;
+    w += sin(dot(p, vec2(0.006, -0.020)) * 6.283 + t * 0.7) * 0.25;
+    return w;
+}
+
 void main() {
     vec3 n = normalize(v_norm);
     vec3 l = normalize(u_light_dir);
@@ -71,28 +84,50 @@ void main() {
 
     vec3 base = height_color(v_height);
 
-    // v0.4 (Variant B): stable texture detail.
-    // - use mipmapped tile textures
-    // - keep scale low to avoid high-frequency shimmer
-    vec2 uv = v_world_pos.xz * u_tex_scale;
-    vec3 tex_g = texture(u_tex_grass, uv).rgb;
-    vec3 tex_r = texture(u_tex_rock, uv).rgb;
-    float slope = 1.0 - clamp(n.y, 0.0, 1.0);
-    float rock_w = clamp(smoothstep(0.18, 0.55, slope) + smoothstep(18.0, 38.0, v_height), 0.0, 1.0);
-    vec3 tex_mix = mix(tex_g, tex_r, rock_w);
-    base = mix(base, base * (0.75 + 0.65 * tex_mix), clamp(u_use_textures, 0.0, 1.0));
+    // Snow: by height + slope (less snow on steep cliffs)
+    float slope = clamp(n.y, 0.0, 1.0);
+    float snow_h = smoothstep(55.0, 85.0, v_height);
+    float snow_s = smoothstep(0.55, 0.90, slope);
+    float snow = snow_h * snow_s;
+    vec3 snow_col = vec3(0.92, 0.94, 0.98);
+    base = mix(base, snow_col, snow);
 
-    // Water overlay (v0.3):
+    vec3 land_base = base;
+
+    // Water overlay (lakes + rivers)
     //  - v_water ~1.0 => lake
     //  - v_water (0..~0.75) => river strength
-    // Clean, low-frequency mask only (Variant A stability).
     float lake = smoothstep(0.90, 1.00, v_water);
     float river = smoothstep(0.10, 0.65, v_water) * (1.0 - lake);
+    float water_amt = clamp(river + lake, 0.0, 1.0);
+
     vec3 river_col = vec3(0.10, 0.32, 0.60);
     vec3 lake_col  = vec3(0.05, 0.18, 0.36);
     vec3 water_col = mix(river_col, lake_col, lake);
-    float water_amt = clamp(river + lake, 0.0, 1.0);
-    base = mix(base, water_col, water_amt);
+
+    // Ripple normal (cheap finite diff)
+    vec2 p = v_world_pos.xz;
+    float eps = 1.25;
+    float h0 = wave_height(p);
+    float hx = wave_height(p + vec2(eps, 0.0));
+    float hz = wave_height(p + vec2(0.0, eps));
+    vec3 wn = normalize(vec3((h0 - hx) / eps, 1.0, (h0 - hz) / eps));
+
+    // Fresnel + pseudo-reflection (sky only)
+    vec3 v = normalize(u_cam_pos - v_world_pos);
+    float ndv = clamp(dot(wn, v), 0.0, 1.0);
+    float fres = pow(1.0 - ndv, 5.0);
+    vec3 r = reflect(-v, wn);
+    vec3 refl = sky_color(r);
+
+    // A small specular highlight from the main light
+    vec3 h = normalize(v + l);
+    float spec = pow(max(dot(wn, h), 0.0), 64.0) * 0.65;
+
+    vec3 water_shaded = mix(water_col, refl, clamp(fres * 0.85, 0.0, 1.0));
+    water_shaded += vec3(1.0, 0.95, 0.85) * spec;
+
+    base = mix(land_base, water_shaded, water_amt);
 
     // Forward distance (camera moves +Z)
     float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);
@@ -104,10 +139,6 @@ void main() {
     // Fog
     float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
     vec3 fog_col = vec3(0.70, 0.80, 0.92);
-
-    // Product LOD: far ring gets additional "fade into fog" to hide resolution changes.
-    float extra = clamp(1.0 - u_chunk_fade, 0.0, 1.0);
-    fog_amount = clamp(fog_amount + extra * 0.25, 0.0, 1.0);
     col = mix(col, fog_col, fog_amount);
 
     f_color = vec4(col, 1.0);

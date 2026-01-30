@@ -55,9 +55,16 @@ class HeightProvider:
         else:
             self.noise = FBMFastNoise(self.seed, cfg)
 
-        # Extra layers for diversity (still low-frequency to avoid shimmer)
+        # Extra layers for diversity (keep it mostly low-frequency to avoid shimmer)
         self._macro = FBMFastNoise(self.seed + 1337, NoiseConfig(octaves=4, base_freq=0.0012, amplitude=28.0))
         self._warp = FBMFastNoise(self.seed + 9001, NoiseConfig(octaves=3, base_freq=0.0022, amplitude=1.0))
+
+        # v0.5: more hills + occasional high mountains
+        # Hills: mid-frequency, small amplitude (adds "rolling" terrain)
+        self._hills = FBMFastNoise(self.seed + 777, NoiseConfig(octaves=5, base_freq=0.012, amplitude=12.0))
+        # Mountains: high amplitude but gated by a very low-frequency mask so it's rare.
+        self._mountains = FBMFastNoise(self.seed + 888, NoiseConfig(octaves=6, base_freq=0.0024, amplitude=95.0))
+        self._mount_mask = FBMFastNoise(self.seed + 999, NoiseConfig(octaves=3, base_freq=0.00065, amplitude=1.0))
 
     def height_at(self, x: float, z: float) -> float:
         # Domain-warp + macro variation for more diverse shapes.
@@ -67,8 +74,17 @@ class HeightProvider:
         zw = z + wz * 35.0
         base = float(self.noise.value(xw, zw))
         macro = float(self._macro.value(x * 0.85, z * 0.85))
-        # Gentle shaping: broaden valleys and sharpen ridges a bit.
-        shaped = 0.85 * base + 0.55 * macro
+
+        # v0.5: more rolling hills
+        hills = float(self._hills.value(x * 1.05, z * 1.05))
+
+        # v0.5: rare high mountains (mask in [0..1])
+        m = float(self._mount_mask.value(x, z))
+        m01 = max(0.0, min(1.0, (m / 1.0 + 1.0) * 0.5))
+        mount_gate = float(_smoothstep(0.65, 0.86, np.array([m01], dtype=np.float32))[0])
+        mountains = float(self._mountains.value(x, z)) * (mount_gate**2)
+
+        shaped = 0.80 * base + 0.55 * macro + 0.70 * hills + 1.00 * mountains
         return shaped
 
     def height_grid(self, x: np.ndarray, z: np.ndarray) -> np.ndarray:
@@ -96,7 +112,19 @@ class HeightProvider:
 
         base = self.noise.grid(xw, zw).astype(np.float32)
         macro = self._macro.grid(xf * np.float32(0.85), zf * np.float32(0.85)).astype(np.float32)
-        h = (np.float32(0.85) * base + np.float32(0.55) * macro).astype(np.float32)
+        hills = self._hills.grid(xf * np.float32(1.05), zf * np.float32(1.05)).astype(np.float32)
+
+        m = self._mount_mask.grid(xf, zf).astype(np.float32)
+        m01 = np.clip((m / np.float32(1.0) + np.float32(1.0)) * np.float32(0.5), 0.0, 1.0)
+        mount_gate = _smoothstep(0.65, 0.86, m01).astype(np.float32)
+        mountains = (self._mountains.grid(xf, zf).astype(np.float32)) * (mount_gate * mount_gate)
+
+        h = (
+            np.float32(0.80) * base
+            + np.float32(0.55) * macro
+            + np.float32(0.70) * hills
+            + np.float32(1.00) * mountains
+        ).astype(np.float32)
 
         # --- lakes ---
         wl = np.float32(self.water_level)

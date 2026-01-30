@@ -17,7 +17,3 @@
   - текстурирование (1–2 tile-текстуры) + mipmapping
   - или material-based shading без high-frequency процедурных паттернов
 - аккуратный продуктовый LOD (без щелей/артефактов)
-
-## Done (v0.4)
-- добавлены 2 tile-текстуры (grass/rock) с mipmapping, смешивание по высоте/уклону
-- дальнее LOD-кольцо дополнительно смешивается с fog через uniform `u_chunk_fade`
