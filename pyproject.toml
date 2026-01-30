@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "flight"
+version = "0.1.0"
+description = "Infinite flight over procedurally generated mountains (ModernGL + pygame)"
+authors = ["Project Team <dev@example.com>"]
+readme = "README.md"
+packages = [{ include = "flight" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pygame = "^2.5.2"
+moderngl = "^5.10.0"
+numpy = "^2.0.0"
+opensimplex = "^0.4.5"
+
+[tool.poetry.scripts]
+flight = "flight.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
