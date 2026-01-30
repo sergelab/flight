@@ -15,6 +15,9 @@ class CPUChunk:
     cz: int
     vbo_data: np.ndarray  # float32 (N,7) => pos(3), norm(3), water(1)
     ibo_data: np.ndarray  # uint32 (M,)
+    # Tree instances for this chunk (variant C: real 3D trees)
+    # Layout: x,y,z, scale, rot_y, kind, c0, c1 (8 floats)
+    tree_instances: np.ndarray
 
 class ChunkManager:
     def __init__(
@@ -25,12 +28,16 @@ class ChunkManager:
         height_provider,
         skirts: bool = True,
         skirt_depth: float = 80.0,
+        trees_enabled: bool = False,
+        tree_density: float = 1.0,
     ) -> None:
         self.res = int(chunk_res)
         self.world_size = float(chunk_world_size)
         self.height_provider = height_provider
         self.skirts = bool(skirts)
         self.skirt_depth = float(skirt_depth)
+        self.trees_enabled = bool(trees_enabled)
+        self.tree_density = float(tree_density)
 
         self.in_q: "Queue[tuple[int,int]]" = Queue()
         self.out_q: "Queue[CPUChunk]" = Queue()
@@ -75,11 +82,18 @@ class ChunkManager:
             except Empty:
                 continue
             try:
-                vbo, ibo, _ = build_chunk_vertices(
-                    cx, cz, self.res, self.world_size, self.height_provider,
-                    skirts=self.skirts, skirt_depth=self.skirt_depth
+                vbo, ibo, tree_instances = build_chunk_vertices(
+                    cx,
+                    cz,
+                    self.res,
+                    self.world_size,
+                    self.height_provider,
+                    skirts=self.skirts,
+                    skirt_depth=self.skirt_depth,
+                    trees_enabled=self.trees_enabled,
+                    tree_density=self.tree_density,
                 )
-                self.out_q.put(CPUChunk(cx=cx, cz=cz, vbo_data=vbo, ibo_data=ibo))
+                self.out_q.put(CPUChunk(cx=cx, cz=cz, vbo_data=vbo, ibo_data=ibo, tree_instances=tree_instances))
             except Exception:
                 # In production we'd log; for now just skip this chunk
                 pass

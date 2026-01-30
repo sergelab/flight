@@ -27,10 +27,10 @@ class LODWorld:
         self.near.shutdown()
         self.far.shutdown()
 
-    def warmup(self, prog, *, timeout_s: float = 2.0) -> None:
+    def warmup(self, renderer, *, timeout_s: float = 2.0) -> None:
         # Warm up near more than far (A: FPS priority)
-        self.near.warmup(prog, min_chunks=28, timeout_s=timeout_s)
-        self.far.warmup(prog, min_chunks=12, timeout_s=min(1.0, timeout_s))
+        self.near.warmup(renderer, min_chunks=28, timeout_s=timeout_s)
+        self.far.warmup(renderer, min_chunks=12, timeout_s=min(1.0, timeout_s))
 
     def update_requests(self, x: float, z: float) -> None:
         self.near.update_requests(x, z)
@@ -38,13 +38,13 @@ class LODWorld:
             self.far.update_requests(x, z)
         self._frame += 1
 
-    def ingest_ready(self, prog, *, max_per_frame: int) -> None:
+    def ingest_ready(self, renderer, *, max_per_frame: int) -> None:
         # A: prioritize near uploads
         near_budget = max(1, int(max_per_frame * 0.75))
         far_budget = max(0, int(max_per_frame - near_budget))
-        self.near.ingest_ready(prog, max_per_frame=near_budget)
+        self.near.ingest_ready(renderer, max_per_frame=near_budget)
         if far_budget > 0:
-            self.far.ingest_ready(prog, max_per_frame=far_budget)
+            self.far.ingest_ready(renderer, max_per_frame=far_budget)
 
     def draw(self, renderer) -> None:
         # Draw far first then near

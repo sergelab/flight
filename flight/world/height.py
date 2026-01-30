@@ -96,6 +96,42 @@ class HeightProvider:
         # Rare plateau mask (very low frequency)
         self._plateau_mask = FBMFastNoise(self.seed + 9090, NoiseConfig(octaves=2, base_freq=0.00045, amplitude=1.0))
 
+        # Forest moisture (biome helper). Low frequency so forests form coherent regions.
+        self._moisture = FBMFastNoise(self.seed + 5050, NoiseConfig(octaves=3, base_freq=0.0016, amplitude=1.0))
+
+    def forest_density_grid(self, x: np.ndarray, z: np.ndarray, h: np.ndarray, n: np.ndarray, water: np.ndarray) -> np.ndarray:
+        """Return forest density 0..1 for a vertex grid.
+
+        This is purely a biome mask used for tree placement (variant C).
+        We gate forests by:
+          - moisture (low-frequency noise)
+          - altitude (no dense forests on high snowy peaks)
+          - slope (less trees on steep cliffs)
+          - water proximity (slightly more trees near rivers/lakes)
+        """
+        # Moisture in [0,1]
+        m = self._moisture.grid(x.astype(np.float32), z.astype(np.float32)).astype(np.float32)
+        m01 = np.clip((m + np.float32(1.0)) * np.float32(0.5), 0.0, 1.0)
+
+        # Base from moisture
+        base = _smoothstep(0.52, 0.82, m01).astype(np.float32)
+
+        # Altitude gate (avoid waterline and high snow)
+        lo = _smoothstep(float(self.water_level + 4.0), float(self.water_level + 14.0), h)
+        hi = (np.float32(1.0) - _smoothstep(65.0, 90.0, h)).astype(np.float32)
+        alt = (lo * hi).astype(np.float32)
+
+        # Slope gate (n.y is 1 on flat ground)
+        slope = np.clip(n[..., 1], 0.0, 1.0).astype(np.float32)
+        slope_gate = _smoothstep(0.55, 0.90, slope).astype(np.float32)
+
+        # Water proximity boost: slightly greener near rivers/lakes, but not on water itself.
+        near_water = _smoothstep(0.05, 0.35, water).astype(np.float32)
+        water_boost = (np.float32(1.0) + near_water * np.float32(0.25)).astype(np.float32)
+        not_water = (np.float32(1.0) - _smoothstep(0.25, 0.85, water)).astype(np.float32)
+
+        return np.clip(base * alt * slope_gate * water_boost * not_water, 0.0, 1.0).astype(np.float32)
+
     def height_at(self, x: float, z: float) -> float:
         # Domain-warp + macro variation for more diverse shapes.
         wx = float(self._warp.value(x + 12.3, z - 9.7))

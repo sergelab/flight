@@ -36,3 +36,7 @@ DEFAULT_FOG_END = FOG_END
 DEFAULT_TARGET_FPS = 60
 DEFAULT_LOD = False  # v0.3 Variant A: stability baseline
 DEFAULT_NOISE = "fast"
+
+# v0.7 defaults: forests (variant C)
+DEFAULT_TREES = True
+DEFAULT_TREE_DENSITY = 1.0

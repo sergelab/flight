@@ -45,12 +45,14 @@ def run_app(
     chunk_size: float,
     fog_start: float,
     fog_end: float,
+    trees: bool,
+    tree_density: float,
 ) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.5.2 (seed={seed})")
+    pygame.display.set_caption(f"flight v0.7 (seed={seed})")
 
     try:
         ctx = moderngl.create_context()
@@ -80,6 +82,8 @@ def run_app(
         chunks_z_ahead=int(CHUNKS_Z_AHEAD),
         skirts=True,
         skirt_depth=80.0,
+        trees_enabled=bool(trees),
+        tree_density=float(tree_density),
     )
     far_res = max(16, int(chunk_res // 2))
     far = WorldParams(
@@ -90,12 +94,14 @@ def run_app(
         chunks_z_ahead=int(CHUNKS_Z_AHEAD * 3),
         skirts=True,
         skirt_depth=120.0,
+        trees_enabled=False,
+        tree_density=0.0,
     )
     world = LODWorld(ctx, LODParams(near=near, far=far, far_update_every_n_frames=2), hp) if lod else LODWorld(ctx, LODParams(near=near, far=near, far_update_every_n_frames=999999), hp)
 
     # Prime + warmup
     world.update_requests(cam.x, cam.z)
-    world.warmup(renderer.prog, timeout_s=2.0)
+    world.warmup(renderer, timeout_s=2.0)
 
     clock = pygame.time.Clock()
     running = True
@@ -148,7 +154,7 @@ def run_app(
                 elif fps_est > target * 1.05:
                     max_upload = min(14, max_upload + 1)
 
-            world.ingest_ready(renderer.prog, max_per_frame=max_upload)
+            world.ingest_ready(renderer, max_per_frame=max_upload)
 
             # Render
             renderer.begin_frame()
@@ -180,7 +186,7 @@ def run_app(
                     pending_near = len(getattr(world.near.cm, "pending", []))
                     pending_far = len(getattr(world.far.cm, "pending", []))
                     lines = [
-                        "flight v0.5.2 (A: FPS first)",
+                        "flight v0.7 (trees variant C)",
                         f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target}",
                         f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}",
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",

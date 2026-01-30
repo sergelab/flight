@@ -4,7 +4,20 @@ import argparse
 import random
 
 from flight.app import run_app
-from flight.config import DEFAULT_HEIGHT_OFFSET, DEFAULT_SEED, DEFAULT_SPEED, DEFAULT_CHUNK_RES, DEFAULT_CHUNK_WORLD_SIZE, DEFAULT_FOG_START, DEFAULT_FOG_END, DEFAULT_TARGET_FPS, DEFAULT_LOD, DEFAULT_NOISE
+from flight.config import (
+    DEFAULT_HEIGHT_OFFSET,
+    DEFAULT_SEED,
+    DEFAULT_SPEED,
+    DEFAULT_CHUNK_RES,
+    DEFAULT_CHUNK_WORLD_SIZE,
+    DEFAULT_FOG_START,
+    DEFAULT_FOG_END,
+    DEFAULT_TARGET_FPS,
+    DEFAULT_LOD,
+    DEFAULT_NOISE,
+    DEFAULT_TREES,
+    DEFAULT_TREE_DENSITY,
+)
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="flight", description="Infinite flight over mountains (ModernGL + pygame)")
@@ -21,6 +34,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--lod", dest="lod", action="store_true", default=DEFAULT_LOD, help="enable LOD rings (default on)")
     p.add_argument("--no-lod", dest="lod", action="store_false", help="disable LOD rings")
     p.add_argument("--noise", choices=["fast","simplex"], default=DEFAULT_NOISE, help="height noise mode (fast or simplex)")
+    p.add_argument("--trees", dest="trees", action="store_true", default=DEFAULT_TREES, help="enable forests (3D trees) (default on)")
+    p.add_argument("--no-trees", dest="trees", action="store_false", help="disable forests (3D trees)")
+    p.add_argument("--tree-density", type=float, default=DEFAULT_TREE_DENSITY, help="tree density multiplier (default 1.0)")
     return p.parse_args()
 
 def main() -> None:
@@ -43,4 +59,6 @@ def main() -> None:
         chunk_size=float(args.chunk_size),
         fog_start=float(args.fog_start),
         fog_end=float(args.fog_end),
+        trees=bool(args.trees),
+        tree_density=float(args.tree_density),
     )

@@ -4,6 +4,7 @@ import moderngl
 import numpy as np
 
 from flight.render.shaders import shader_sources
+from flight.render.trees import tree_shader_sources, build_tree_mesh
 from flight.util.math import perspective
 
 _SKY_VERT = """#version 150
@@ -66,6 +67,25 @@ class Renderer:
         vert, frag = shader_sources(ctx.version_code)
         self.prog = self.ctx.program(vertex_shader=vert, fragment_shader=frag)
 
+        # Trees (variant C): separate instanced shader.
+        # We keep this optional: if something fails to compile on a given GPU, the app still runs.
+        self.tree_prog: moderngl.Program | None = None
+        self._tree_vbo: moderngl.Buffer | None = None
+        self._tree_ibo: moderngl.Buffer | None = None
+        self._tree_ibo_len: int = 0
+        try:
+            glsl = 330 if ctx.version_code >= 330 else 150
+            tvert, tfrag = tree_shader_sources(glsl)
+            self.tree_prog = self.ctx.program(vertex_shader=tvert, fragment_shader=tfrag)
+            tvbo, tibo = build_tree_mesh()
+            self._tree_vbo = self.ctx.buffer(tvbo.tobytes())
+            self._tree_ibo = self.ctx.buffer(tibo.tobytes())
+            self._tree_ibo_len = int(tibo.size)
+            # Static uniforms
+            self.tree_prog["u_proj"].write(perspective(70.0, width / height, 0.1, 800.0).astype(np.float32).tobytes())
+        except Exception:
+            self.tree_prog = None
+
         self._proj = perspective(70.0, width / height, 0.1, 800.0).astype(np.float32)
         self.prog["u_proj"].write(self._proj.tobytes())
         if "u_chunk_fade" in self.prog:
@@ -111,11 +131,19 @@ class Renderer:
                 obj.release()
             except Exception:
                 pass
+
         try:
             if self._hud_tex is not None:
                 self._hud_tex.release()
         except Exception:
             pass
+
+        for obj in [self.tree_prog, self._tree_vbo, self._tree_ibo]:
+            try:
+                if obj is not None:
+                    obj.release()
+            except Exception:
+                pass
 
     def resize(self, width: int, height: int) -> None:
         self.width = width
@@ -123,6 +151,8 @@ class Renderer:
         self.ctx.viewport = (0, 0, width, height)
         self._proj = perspective(70.0, width / height, 0.1, 800.0).astype(np.float32)
         self.prog["u_proj"].write(self._proj.tobytes())
+        if self.tree_prog is not None and "u_proj" in self.tree_prog:
+            self.tree_prog["u_proj"].write(self._proj.tobytes())
         if "u_chunk_fade" in self.prog:
             self.prog["u_chunk_fade"].value = 1.0
 
@@ -156,12 +186,41 @@ class Renderer:
         if "u_chunk_fade" in self.prog:
             self.prog["u_chunk_fade"].value = 1.0
 
+        # Trees share most uniforms with terrain (no time needed here)
+        if self.tree_prog is not None:
+            self.tree_prog["u_view"].write(view.astype(np.float32).tobytes())
+            self.tree_prog["u_cam_pos"].value = (float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2]))
+            self.tree_prog["u_light_dir"].value = (float(light_dir[0]), float(light_dir[1]), float(light_dir[2]))
+            self.tree_prog["u_fog_start"].value = float(fog_start)
+            self.tree_prog["u_fog_end"].value = float(fog_end)
+
+        # (proj is updated on resize)
+
     def set_chunk_fade(self, fade: float) -> None:
         if "u_chunk_fade" in self.prog:
             self.prog["u_chunk_fade"].value = float(fade)
 
     def draw_chunk(self, vao: moderngl.VertexArray) -> None:
             vao.render()
+
+    # --- Trees ---
+    def make_tree_vao(self, instance_vbo: moderngl.Buffer) -> moderngl.VertexArray:
+        if self.tree_prog is None or self._tree_vbo is None or self._tree_ibo is None:
+            raise RuntimeError("Tree renderer is not initialized")
+        # Base mesh: pos+norm, per-vertex
+        # Instance buffer: 8 floats per instance
+        return self.ctx.vertex_array(
+            self.tree_prog,
+            [
+                (self._tree_vbo, "3f 3f", "in_pos", "in_norm"),
+                (instance_vbo, "3f 1f 1f 1f 1f 1f/i", "in_i_pos", "in_i_scale", "in_i_rot", "in_i_kind", "in_i_c0", "in_i_c1"),
+            ],
+            self._tree_ibo,
+        )
+
+    def draw_trees(self, vao: moderngl.VertexArray, instance_count: int) -> None:
+        # Instance rendering
+        vao.render(instances=int(instance_count))
 
     # --- HUD ---
     def hud_update_rgba(self, rgba_bytes: bytes, w: int, h: int) -> None:

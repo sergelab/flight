@@ -16,6 +16,9 @@ class WorldParams:
     chunks_z_ahead: int
     skirts: bool = True
     skirt_depth: float = 80.0
+    # Trees (variant C). Recommended: enabled only for near world.
+    trees_enabled: bool = False
+    tree_density: float = 1.0
 
 @dataclass
 class ChunkGPU:
@@ -23,6 +26,9 @@ class ChunkGPU:
     cz: int
     vao: moderngl.VertexArray
     vbo: moderngl.Buffer
+    tree_vao: moderngl.VertexArray | None = None
+    tree_vbo: moderngl.Buffer | None = None
+    tree_count: int = 0
 
 class World:
     def __init__(self, ctx: moderngl.Context, params: WorldParams, height_provider) -> None:
@@ -36,6 +42,8 @@ class World:
             height_provider=height_provider,
             skirts=params.skirts,
             skirt_depth=params.skirt_depth,
+            trees_enabled=params.trees_enabled,
+            tree_density=params.tree_density,
         )
 
         self.chunks: Dict[Tuple[int,int], ChunkGPU] = {}
@@ -50,6 +58,10 @@ class World:
             try:
                 c.vao.release()
                 c.vbo.release()
+                if c.tree_vao is not None:
+                    c.tree_vao.release()
+                if c.tree_vbo is not None:
+                    c.tree_vbo.release()
             except Exception:
                 pass
         self.chunks.clear()
@@ -80,16 +92,16 @@ class World:
 
         # Optional: could evict far-behind chunks to save VRAM (not aggressive yet)
 
-    def warmup(self, prog, *, min_chunks: int = 24, timeout_s: float = 2.0) -> None:
+    def warmup(self, renderer, *, min_chunks: int = 24, timeout_s: float = 2.0) -> None:
         import time as _time
         deadline = _time.perf_counter() + float(timeout_s)
         while len(self.chunks) < int(min_chunks) and _time.perf_counter() < deadline:
-            self.ingest_ready(prog, max_per_frame=32)
+            self.ingest_ready(renderer, max_per_frame=32)
             if len(self.chunks) >= int(min_chunks):
                 break
             _time.sleep(0.01)
 
-    def ingest_ready(self, prog, *, max_per_frame: int = 8) -> None:
+    def ingest_ready(self, renderer, *, max_per_frame: int = 8) -> None:
         ready = self.cm.poll_ready(max_items=int(max_per_frame))
         for cpu in ready:
             key = (cpu.cx, cpu.cz)
@@ -103,15 +115,28 @@ class World:
 
             vbo = self.ctx.buffer(cpu.vbo_data.tobytes())
             vao = self.ctx.vertex_array(
-                prog,
+                renderer.prog,
                 [
                     (vbo, "3f 3f 1f", "in_pos", "in_norm", "in_water"),
                 ],
                 self._ibo,
             )
-            self.chunks[key] = ChunkGPU(cx=cpu.cx, cz=cpu.cz, vao=vao, vbo=vbo)
+
+            tree_vao = None
+            tree_vbo = None
+            tree_count = 0
+            if getattr(renderer, "tree_prog", None) is not None and cpu.tree_instances is not None and int(cpu.tree_instances.shape[0]) > 0:
+                tree_vbo = self.ctx.buffer(cpu.tree_instances.astype('f4').tobytes())
+                tree_count = int(cpu.tree_instances.shape[0])
+                tree_vao = renderer.make_tree_vao(tree_vbo)
+
+            self.chunks[key] = ChunkGPU(cx=cpu.cx, cz=cpu.cz, vao=vao, vbo=vbo, tree_vao=tree_vao, tree_vbo=tree_vbo, tree_count=tree_count)
 
     def draw(self, renderer) -> None:
         # Simple draw order: just draw all
         for c in self.chunks.values():
             renderer.draw_chunk(c.vao)
+        # Trees after terrain (so they get proper depth testing)
+        for c in self.chunks.values():
+            if c.tree_vao is not None and c.tree_count > 0:
+                renderer.draw_trees(c.tree_vao, c.tree_count)
