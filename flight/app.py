@@ -52,7 +52,7 @@ def run_app(
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.7 (seed={seed})")
+    pygame.display.set_caption(f"flight v0.7.0 (seed={seed})")
 
     try:
         ctx = moderngl.create_context()
@@ -186,7 +186,7 @@ def run_app(
                     pending_near = len(getattr(world.near.cm, "pending", []))
                     pending_far = len(getattr(world.far.cm, "pending", []))
                     lines = [
-                        "flight v0.7 (trees variant C)",
+                        "flight v0.7.0 (trees variant C)",
                         f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target}",
                         f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}",
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
