@@ -6,17 +6,22 @@ import numpy as np
 from flight.render.shaders import shader_sources
 from flight.util.math import perspective
 
-_DEBUG_VERT = """#version 150
+_HUD_VERT = """#version 150
 in vec2 in_pos;
+in vec2 in_uv;
+out vec2 v_uv;
 void main() {
+    v_uv = in_uv;
     gl_Position = vec4(in_pos, 0.0, 1.0);
 }
 """
 
-_DEBUG_FRAG = """#version 150
+_HUD_FRAG = """#version 150
+uniform sampler2D u_tex;
+in vec2 v_uv;
 out vec4 f_color;
 void main() {
-    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+    f_color = texture(u_tex, v_uv);
 }
 """
 
@@ -31,25 +36,35 @@ class Renderer:
         self.prog["u_proj"].write(perspective(70.0, width / height, 0.1, 800.0).tobytes())
 
         self.ctx.enable(moderngl.DEPTH_TEST)
-        # Safer early: no culling until visuals confirmed on target GPUs
-        self.ctx.disable(moderngl.CULL_FACE)
+        self.ctx.disable(moderngl.CULL_FACE)  # safe default for now
 
-        # Debug triangle in NDC (bottom-left). Uses a tiny GLSL 150 program (works on GL 3.2+).
-        self._dbg_prog = self.ctx.program(vertex_shader=_DEBUG_VERT, fragment_shader=_DEBUG_FRAG)
-        dbg_vertices = np.array([
-            -0.95, -0.95,
-            -0.75, -0.95,
-            -0.95, -0.75,
+        # HUD quad (top-left)
+        self._hud_prog = self.ctx.program(vertex_shader=_HUD_VERT, fragment_shader=_HUD_FRAG)
+        quad = np.array([
+            # x, y, u, v  (top-left box)
+            -0.98,  0.98, 0.0, 1.0,
+            -0.20,  0.98, 1.0, 1.0,
+            -0.98,  0.70, 0.0, 0.0,
+
+            -0.20,  0.98, 1.0, 1.0,
+            -0.20,  0.70, 1.0, 0.0,
+            -0.98,  0.70, 0.0, 0.0,
         ], dtype=np.float32)
-        self._dbg_vbo = self.ctx.buffer(dbg_vertices.tobytes())
-        self._dbg_vao = self.ctx.vertex_array(self._dbg_prog, [(self._dbg_vbo, "2f", "in_pos")])
+        self._hud_vbo = self.ctx.buffer(quad.tobytes())
+        self._hud_vao = self.ctx.vertex_array(self._hud_prog, [(self._hud_vbo, "2f 2f", "in_pos", "in_uv")])
+
+        self._hud_tex: moderngl.Texture | None = None
+        self._hud_tex_size = (0, 0)
 
     def release(self) -> None:
+        for obj in [self._hud_vao, self._hud_vbo, self._hud_prog, self.prog]:
+            try:
+                obj.release()
+            except Exception:
+                pass
         try:
-            self._dbg_vao.release()
-            self._dbg_vbo.release()
-            self._dbg_prog.release()
-            self.prog.release()
+            if self._hud_tex is not None:
+                self._hud_tex.release()
         except Exception:
             pass
 
@@ -72,8 +87,27 @@ class Renderer:
     def draw_chunk(self, vao: moderngl.VertexArray) -> None:
         vao.render()
 
-    def draw_debug(self) -> None:
-        # Draw after terrain; disable depth so it always shows.
+    # --- HUD ---
+    def hud_update_rgba(self, rgba_bytes: bytes, w: int, h: int) -> None:
+        if self._hud_tex is None or self._hud_tex_size != (w, h):
+            if self._hud_tex is not None:
+                self._hud_tex.release()
+            self._hud_tex = self.ctx.texture((w, h), 4, data=rgba_bytes)
+            self._hud_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+            self._hud_tex.repeat_x = False
+            self._hud_tex.repeat_y = False
+            self._hud_tex_size = (w, h)
+        else:
+            self._hud_tex.write(rgba_bytes)
+
+    def draw_hud(self) -> None:
+        if self._hud_tex is None:
+            return
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
         self.ctx.disable(moderngl.DEPTH_TEST)
-        self._dbg_vao.render(mode=moderngl.TRIANGLES)
+        self._hud_tex.use(location=0)
+        self._hud_prog["u_tex"].value = 0
+        self._hud_vao.render(mode=moderngl.TRIANGLES)
         self.ctx.enable(moderngl.DEPTH_TEST)
+        self.ctx.disable(moderngl.BLEND)

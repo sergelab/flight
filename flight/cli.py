@@ -12,6 +12,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--speed", type=float, default=DEFAULT_SPEED, help="forward speed (world units / sec)")
     p.add_argument("--height-offset", type=float, default=DEFAULT_HEIGHT_OFFSET, help="camera height above terrain")
     p.add_argument("--wireframe", action="store_true", help="render wireframe")
+    p.add_argument("--debug", action="store_true", help="enable debug overlay (HUD + logs)")
     return p.parse_args()
 
 def main() -> None:
@@ -26,4 +27,5 @@ def main() -> None:
         speed=float(args.speed),
         height_offset=float(args.height_offset),
         wireframe=bool(args.wireframe),
+        debug=bool(args.debug),
     )

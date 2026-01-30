@@ -37,6 +37,33 @@ class World:
 
         self.chunks: Dict[Tuple[int,int], ChunkGPU] = {}
 
+
+    def warmup(self, prog, *, min_chunks: int = 24, timeout_s: float = 2.0) -> None:
+        """Preload some chunks into GPU so the first frame isn't empty.
+
+        Blocks briefly (<= timeout_s) while uploading chunks as they are generated.
+        """
+        import time as _time
+        deadline = _time.perf_counter() + float(timeout_s)
+        while len(self.chunks) < int(min_chunks) and _time.perf_counter() < deadline:
+            ready = self.cm.poll_ready(max_items=1)
+            if not ready:
+                _time.sleep(0.01)
+                continue
+            for cpu in ready:
+                key = (cpu.cx, cpu.cz)
+                if key in self.chunks:
+                    continue
+                vbo = self.ctx.buffer(cpu.vbo_data.tobytes())
+                vao = self.ctx.vertex_array(
+                    prog,
+                    [
+                        (vbo, "3f 3f", "in_pos", "in_norm"),
+                    ],
+                    self.ibo,
+                )
+                self.chunks[key] = ChunkGPU(cx=cpu.cx, cz=cpu.cz, vao=vao, vbo=vbo)
+
     def shutdown(self) -> None:
         self.cm.shutdown()
         for ch in self.chunks.values():

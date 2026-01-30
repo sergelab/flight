@@ -18,18 +18,24 @@ from flight.util.math import normalize
 
 def _init_pygame_gl() -> None:
     pygame.init()
-    # Request a modern core profile context (important on macOS).
+    # macOS: request modern core profile context
     pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 3)
     pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 3)
     pygame.display.gl_set_attribute(pygame.GL_CONTEXT_PROFILE_MASK, pygame.GL_CONTEXT_PROFILE_CORE)
     pygame.display.gl_set_attribute(pygame.GL_DEPTH_SIZE, 24)
     pygame.display.gl_set_attribute(pygame.GL_DOUBLEBUFFER, 1)
 
-def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -> None:
+def _surface_to_rgba_bytes(surf: pygame.Surface) -> tuple[bytes, int, int]:
+    s = surf.convert_alpha()
+    w, h = s.get_size()
+    data = pygame.image.tostring(s, "RGBA", False)
+    return data, w, h
+
+def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, debug: bool) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
-    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
+    pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
     pygame.display.set_caption(f"flight v0.1 (seed={seed})")
 
     try:
@@ -41,7 +47,9 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
             "Ensure you run from a normal GUI session."
         ) from e
 
-    print(f"[flight] moderngl ctx version_code={ctx.version_code} vendor={ctx.info.get('GL_VENDOR')} renderer={ctx.info.get('GL_RENDERER')}")
+    if debug:
+        print(f"[flight] moderngl ctx version_code={ctx.version_code} vendor={ctx.info.get('GL_VENDOR')} renderer={ctx.info.get('GL_RENDERER')}")
+
     ctx.viewport = (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
     if wireframe:
         ctx.wireframe = True
@@ -50,7 +58,7 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
 
     hp = HeightProvider(seed=seed)
     cam = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
-    cam.z = -30.0
+    cam.z = -30.0  # start slightly back so forward view has terrain
 
     world = World(
         ctx,
@@ -64,15 +72,22 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
         hp.height_at,
     )
 
-    # Prime requests immediately
+    # Prime requests and warmup
     world.update_requests(cam.x, cam.z)
+    world.warmup(renderer.prog, min_chunks=24, timeout_s=2.0)
 
     clock = pygame.time.Clock()
     running = True
     last_t = time.perf_counter()
+    start_t = last_t
     last_log = last_t
+    last_hud = last_t
+    fps_est = 0.0
 
     light_dir = normalize(np.array(LIGHT_DIR, dtype=np.float32))
+
+    pygame.font.init()
+    font = pygame.font.SysFont("Menlo", 16) or pygame.font.Font(None, 16)
 
     try:
         while running:
@@ -87,18 +102,20 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
                     running = False
                 elif event.type == pygame.VIDEORESIZE:
                     w, h = max(64, event.w), max(64, event.h)
-                    screen = pygame.display.set_mode((w, h), flags)
+                    pygame.display.set_mode((w, h), flags)
                     renderer.resize(w, h)
 
             cam.update(dt, hp.height_at)
 
             world.update_requests(cam.x, cam.z)
-            world.ingest_ready(renderer.prog, max_per_frame=3)
+
+            # Faster uploads for first 2 seconds, then stable
+            max_upload = 8 if (now - start_t) < 2.0 else 3
+            world.ingest_ready(renderer.prog, max_per_frame=max_upload)
 
             renderer.begin_frame()
-            view = cam.view_matrix()
             renderer.set_common_uniforms(
-                view=view,
+                view=cam.view_matrix(),
                 cam_pos=cam.eye(),
                 light_dir=light_dir,
                 fog_start=FOG_START,
@@ -106,17 +123,41 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
             )
             world.draw(renderer)
 
-            # Always draw a debug triangle so we know the pipeline renders.
-            renderer.draw_debug()
+            if debug:
+                if dt > 0:
+                    fps_est = 0.9 * fps_est + 0.1 * (1.0 / dt) if fps_est > 0 else (1.0 / dt)
+
+                if now - last_hud >= 0.1:
+                    last_hud = now
+                    pending_n = len(getattr(world.cm, "pending", []))
+                    lines = [
+                        "flight v0.1 (debug)",
+                        f"seed={seed}  speed={speed:.1f}  offset={height_offset:.1f}",
+                        f"z={cam.z:.1f}  y={cam.y:.1f}  fps~{fps_est:.0f}",
+                        f"chunks_gpu={len(world.chunks)}  pending={pending_n}  upload/frame={max_upload}",
+                    ]
+                    pad = 6
+                    line_h = font.get_linesize()
+                    w = max(font.size(line)[0] for line in lines) + pad * 2
+                    h = line_h * len(lines) + pad * 2
+                    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+                    surf.fill((0, 0, 0, 120))
+                    y = pad
+                    for line in lines:
+                        img = font.render(line, True, (255, 255, 255))
+                        surf.blit(img, (pad, y))
+                        y += line_h
+                    rgba, tw, th = _surface_to_rgba_bytes(surf)
+                    renderer.hud_update_rgba(rgba, tw, th)
+
+                renderer.draw_hud()
+
+                if now - last_log >= 1.0:
+                    last_log = now
+                    pending_n = len(getattr(world.cm, "pending", []))
+                    print(f"[flight] z={cam.z:.1f} y={cam.y:.1f} chunks_gpu={len(world.chunks)} pending={pending_n}")
 
             pygame.display.flip()
-
-            if now - last_log >= 1.0:
-                last_log = now
-                # chunk manager internals (best-effort)
-                pending = getattr(world.cm, "pending", None)
-                pending_n = len(pending) if pending is not None else -1
-                print(f"[flight] z={cam.z:.1f} y={cam.y:.1f} chunks_gpu={len(world.chunks)} pending={pending_n}")
 
             if FPS_CAP and FPS_CAP > 0:
                 clock.tick(FPS_CAP)

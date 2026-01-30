@@ -26,3 +26,9 @@ poetry run flight
 
 ## OpenGL контекст
 Проект требует OpenGL 3.2+ (предпочтительно 3.3 core). На macOS контекст запрашивается через атрибуты pygame.
+
+
+## Debug overlay
+```bash
+poetry run flight --debug
+```
