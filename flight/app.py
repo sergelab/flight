@@ -18,12 +18,10 @@ from flight.util.math import normalize
 
 def _init_pygame_gl() -> None:
     pygame.init()
-
     # Request a modern core profile context (important on macOS).
     pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 3)
     pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 3)
     pygame.display.gl_set_attribute(pygame.GL_CONTEXT_PROFILE_MASK, pygame.GL_CONTEXT_PROFILE_CORE)
-
     pygame.display.gl_set_attribute(pygame.GL_DEPTH_SIZE, 24)
     pygame.display.gl_set_attribute(pygame.GL_DOUBLEBUFFER, 1)
 
@@ -34,19 +32,17 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
     pygame.display.set_caption(f"flight v0.1 (seed={seed})")
 
-    # Create ModernGL context on top of pygame's current GL context
     try:
         ctx = moderngl.create_context()
     except Exception as e:
         pygame.quit()
         raise RuntimeError(
-            "Failed to create ModernGL context. "
-            "On macOS, ensure a Core OpenGL 3.2+ context is available. "
-            "Try updating pygame/moderngl and run from a normal GUI session."
+            "Failed to create ModernGL context (need OpenGL 3.2+). "
+            "Ensure you run from a normal GUI session."
         ) from e
 
+    print(f"[flight] moderngl ctx version_code={ctx.version_code} vendor={ctx.info.get('GL_VENDOR')} renderer={ctx.info.get('GL_RENDERER')}")
     ctx.viewport = (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
-
     if wireframe:
         ctx.wireframe = True
 
@@ -54,6 +50,7 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
 
     hp = HeightProvider(seed=seed)
     cam = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
+    cam.z = -30.0
 
     world = World(
         ctx,
@@ -67,20 +64,21 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
         hp.height_at,
     )
 
+    # Prime requests immediately
+    world.update_requests(cam.x, cam.z)
+
     clock = pygame.time.Clock()
     running = True
     last_t = time.perf_counter()
+    last_log = last_t
 
     light_dir = normalize(np.array(LIGHT_DIR, dtype=np.float32))
 
     try:
         while running:
-            # dt
             now = time.perf_counter()
-            dt = now - last_t
+            dt = min(now - last_t, 0.05)
             last_t = now
-            # clamp dt to avoid crazy jumps after window drag
-            dt = min(dt, 0.05)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -94,11 +92,9 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
 
             cam.update(dt, hp.height_at)
 
-            # Update world chunk requests and ingest ready chunks (GPU upload)
             world.update_requests(cam.x, cam.z)
-            world.ingest_ready(renderer.prog, max_per_frame=2)
+            world.ingest_ready(renderer.prog, max_per_frame=3)
 
-            # Render
             renderer.begin_frame()
             view = cam.view_matrix()
             renderer.set_common_uniforms(
@@ -110,13 +106,23 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool) -
             )
             world.draw(renderer)
 
+            # Always draw a debug triangle so we know the pipeline renders.
+            renderer.draw_debug()
+
             pygame.display.flip()
+
+            if now - last_log >= 1.0:
+                last_log = now
+                # chunk manager internals (best-effort)
+                pending = getattr(world.cm, "pending", None)
+                pending_n = len(pending) if pending is not None else -1
+                print(f"[flight] z={cam.z:.1f} y={cam.y:.1f} chunks_gpu={len(world.chunks)} pending={pending_n}")
 
             if FPS_CAP and FPS_CAP > 0:
                 clock.tick(FPS_CAP)
             else:
-                clock.tick()  # just yields
-
+                clock.tick()
     finally:
         world.shutdown()
+        renderer.release()
         pygame.quit()

@@ -26,3 +26,8 @@
 ## Hotfix: terrain not visible
 - Исправлен порядок индексов (winding) для корректной видимости при backface culling
 - Отключён CULL_FACE по умолчанию (можно включить позже после проверки)
+
+## Last fix: запуск + диагностика
+- Исправлен debug-fix (World.update_requests не теряется)
+- Добавлен debug triangle и периодический лог (z/y/chunks)
+- Уточнён запрос OpenGL контекста под macOS
