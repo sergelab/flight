@@ -40,3 +40,11 @@ DEFAULT_NOISE = "fast"
 # v0.7 defaults: forests (variant C)
 DEFAULT_TREES = True
 DEFAULT_TREE_DENSITY = 1.0
+
+# Controls
+# By default we start in manual mode (arrow keys). Use --auto to restore the
+# previous behaviour: constant forward motion.
+DEFAULT_AUTO = False
+
+# Rotation speed for manual controls (radians / second).
+DEFAULT_TURN_RATE = 1.8
