@@ -32,8 +32,7 @@ void main() {
 }
 """
 
-_FRAG_BODY = """
-in vec3 v_world_pos;
+_FRAG_BODY = """in vec3 v_world_pos;
 in vec3 v_norm;
 in float v_height;
 
@@ -62,28 +61,37 @@ void main() {
     float diff = max(dot(n, l), 0.0);
 
     vec3 base = height_color(v_height);
-vec3 col = base * (0.35 + 0.85 * diff);
 
-// v0.2: subtle contour lines to make motion/relief easier to read
-float spacing = 6.0; // world units
-float h = v_height / spacing;
-float fracv = abs(fract(h) - 0.5);
-float aa = max(fwidth(h), 0.001);
-float line = 1.0 - smoothstep(0.02, 0.02 + aa * 1.5, fracv);
-col = mix(col, col * 0.75, line);
+    float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);
 
-    // v0.2.1: more visible fog using forward distance
-float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);
-float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
+    float detail = 1.0 - smoothstep(200.0, 650.0, dist);
 
-// Fog color: light sky-ish
-vec3 fog_col = vec3(0.70, 0.80, 0.92);
-float cf = pow(clamp(u_chunk_fade, 0.0, 1.0), 1.8);
+    float amb = mix(0.44, 0.58, smoothstep(0.0, 900.0, dist));
+    vec3 col = base * (amb + 0.95 * diff);
+
+    float spacing = 7.0;
+    float hh = v_height / spacing;
+    float fracv = abs(fract(hh) - 0.5);
+    float aa = max(fwidth(hh), 0.001);
+    float width = mix(0.05, 0.16, 1.0 - detail);
+    float line = 1.0 - smoothstep(width, width + aa * 2.0, fracv);
+    col = mix(col, col * (1.0 - 0.32 * detail), line);
+
+    float macro = sin(v_world_pos.x * 0.02) * sin(v_world_pos.z * 0.02);
+    col *= (1.0 + 0.14 * macro * detail);
+
+    float slope = clamp(1.0 - n.y, 0.0, 1.0);
+    col *= (1.0 - 0.38 * slope * detail);
+
+    float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
+    vec3 fog_col = vec3(0.70, 0.80, 0.92);
+
+    float cf = clamp(u_chunk_fade, 0.0, 1.0);
     col = mix(fog_col, col, cf);
+
     col = mix(col, fog_col, fog_amount);
-f_color = vec4(col, 1.0);
-}
-"""
+    f_color = vec4(col, 1.0);
+}"""
 
 def shader_sources(ctx_version_code: int) -> tuple[str, str]:
     ver = _pick_glsl_version(ctx_version_code)

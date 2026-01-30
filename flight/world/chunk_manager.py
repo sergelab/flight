@@ -1,93 +1,85 @@
 from __future__ import annotations
 
-import queue
-import threading
 from dataclasses import dataclass
-from typing import Dict, Tuple, Set
+from queue import Queue, Empty
+from threading import Thread, Event
+from typing import Callable, Iterable
 
 import numpy as np
 
-from flight.world.chunk import ChunkCPU
 from flight.world.mesh_builder import build_chunk_vertices
 
 @dataclass(frozen=True)
-class ChunkWindow:
-    chunks_x: int
-    z_behind: int
-    z_ahead: int
-
-class ChunkWorker(threading.Thread):
-    def __init__(self, task_q: "queue.Queue[tuple[int,int]]", out_q: "queue.Queue[ChunkCPU]", *, res: int, world_size: float, height_provider) -> None:
-        super().__init__(daemon=True)
-        self.task_q = task_q
-        self.out_q = out_q
-        self.res = int(res)
-        self.world_size = float(world_size)
-        self.height_provider = height_provider
-        self._stop = threading.Event()
-
-    def stop(self) -> None:
-        self._stop.set()
-
-    def run(self) -> None:
-        while not self._stop.is_set():
-            try:
-                cx, cz = self.task_q.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            try:
-                pos, norm = build_chunk_vertices(cx, cz, self.res, self.world_size, self.height_provider)
-                interleaved = np.concatenate([pos, norm], axis=1).astype(np.float32).reshape(-1)
-                self.out_q.put(ChunkCPU(cx=cx, cz=cz, vbo_data=interleaved))
-            finally:
-                self.task_q.task_done()
+class CPUChunk:
+    cx: int
+    cz: int
+    vbo_data: np.ndarray  # float32 (N,6)
+    ibo_data: np.ndarray  # uint32 (M,)
 
 class ChunkManager:
-    def __init__(self, *, res: int, world_size: float, window: ChunkWindow, height_provider) -> None:
-        self.res = int(res)
-        self.world_size = float(world_size)
-        self.window = window
+    def __init__(
+        self,
+        *,
+        chunk_res: int,
+        chunk_world_size: float,
+        height_provider,
+        skirts: bool = True,
+        skirt_depth: float = 80.0,
+    ) -> None:
+        self.res = int(chunk_res)
+        self.world_size = float(chunk_world_size)
         self.height_provider = height_provider
+        self.skirts = bool(skirts)
+        self.skirt_depth = float(skirt_depth)
 
-        self.task_q: "queue.Queue[tuple[int,int]]" = queue.Queue()
-        self.out_q: "queue.Queue[ChunkCPU]" = queue.Queue()
+        self.in_q: "Queue[tuple[int,int]]" = Queue()
+        self.out_q: "Queue[CPUChunk]" = Queue()
 
-        self.worker = ChunkWorker(self.task_q, self.out_q, res=self.res, world_size=self.world_size, height_provider=self.height_provider)
-        self.worker.start()
+        self.pending: set[tuple[int,int]] = set()
 
-        self.pending: Set[Tuple[int,int]] = set()
+        self._stop = Event()
+        self._thread = Thread(target=self._worker, daemon=True)
+        self._thread.start()
 
     def shutdown(self) -> None:
-        self.worker.stop()
-        self.worker.join(timeout=1.0)
+        self._stop.set()
+        # drain queue to unblock
+        try:
+            while True:
+                self.in_q.get_nowait()
+        except Exception:
+            pass
+        self._thread.join(timeout=1.0)
 
-    def world_to_chunk(self, x: float, z: float) -> tuple[int,int]:
-        cx = int(np.floor(x / self.world_size))
-        cz = int(np.floor(z / self.world_size))
-        return cx, cz
+    def request(self, cx: int, cz: int) -> None:
+        key = (int(cx), int(cz))
+        if key in self.pending:
+            return
+        self.pending.add(key)
+        self.in_q.put(key)
 
-    def needed_chunks(self, cam_cx: int, cam_cz: int) -> Set[Tuple[int,int]]:
-        half = self.window.chunks_x // 2
-        needed: Set[Tuple[int,int]] = set()
-        for dx in range(-half, half + 1):
-            for dz in range(-self.window.z_behind, self.window.z_ahead + 1):
-                needed.add((cam_cx + dx, cam_cz + dz))
-        return needed
-
-    def request_missing(self, needed: Set[Tuple[int,int]], existing: Set[Tuple[int,int]]) -> None:
-        for key in needed:
-            if key in existing or key in self.pending:
-                continue
-            self.pending.add(key)
-            self.task_q.put(key)
-
-    def poll_ready(self, max_items: int = 2) -> list[ChunkCPU]:
-        ready = []
-        for _ in range(max_items):
+    def poll_ready(self, *, max_items: int = 16) -> list[CPUChunk]:
+        ready: list[CPUChunk] = []
+        for _ in range(int(max_items)):
             try:
-                ch = self.out_q.get_nowait()
-            except queue.Empty:
+                item = self.out_q.get_nowait()
+            except Empty:
                 break
-            self.pending.discard((ch.cx, ch.cz))
-            ready.append(ch)
+            ready.append(item)
         return ready
+
+    def _worker(self) -> None:
+        while not self._stop.is_set():
+            try:
+                cx, cz = self.in_q.get(timeout=0.05)
+            except Empty:
+                continue
+            try:
+                vbo, ibo, _ = build_chunk_vertices(
+                    cx, cz, self.res, self.world_size, self.height_provider,
+                    skirts=self.skirts, skirt_depth=self.skirt_depth
+                )
+                self.out_q.put(CPUChunk(cx=cx, cz=cz, vbo_data=vbo, ibo_data=ibo))
+            except Exception:
+                # In production we'd log; for now just skip this chunk
+                pass
