@@ -44,6 +44,12 @@ uniform vec3 u_light_dir;
 uniform vec3 u_cam_pos;
 uniform float u_fog_start;
 uniform float u_fog_end;
+uniform float u_chunk_fade;
+
+uniform sampler2D u_tex_grass;
+uniform sampler2D u_tex_rock;
+uniform float u_tex_scale;
+uniform float u_use_textures;
 
 out vec4 f_color;
 
@@ -64,6 +70,17 @@ void main() {
     float diff = max(dot(n, l), 0.0);
 
     vec3 base = height_color(v_height);
+
+    // v0.4 (Variant B): stable texture detail.
+    // - use mipmapped tile textures
+    // - keep scale low to avoid high-frequency shimmer
+    vec2 uv = v_world_pos.xz * u_tex_scale;
+    vec3 tex_g = texture(u_tex_grass, uv).rgb;
+    vec3 tex_r = texture(u_tex_rock, uv).rgb;
+    float slope = 1.0 - clamp(n.y, 0.0, 1.0);
+    float rock_w = clamp(smoothstep(0.18, 0.55, slope) + smoothstep(18.0, 38.0, v_height), 0.0, 1.0);
+    vec3 tex_mix = mix(tex_g, tex_r, rock_w);
+    base = mix(base, base * (0.75 + 0.65 * tex_mix), clamp(u_use_textures, 0.0, 1.0));
 
     // Water overlay (v0.3):
     //  - v_water ~1.0 => lake
@@ -87,6 +104,10 @@ void main() {
     // Fog
     float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
     vec3 fog_col = vec3(0.70, 0.80, 0.92);
+
+    // Product LOD: far ring gets additional "fade into fog" to hide resolution changes.
+    float extra = clamp(1.0 - u_chunk_fade, 0.0, 1.0);
+    fog_amount = clamp(fog_amount + extra * 0.25, 0.0, 1.0);
     col = mix(col, fog_col, fog_amount);
 
     f_color = vec4(col, 1.0);

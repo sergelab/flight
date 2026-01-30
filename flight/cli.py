@@ -4,7 +4,21 @@ import argparse
 import random
 
 from flight.app import run_app
-from flight.config import DEFAULT_HEIGHT_OFFSET, DEFAULT_SEED, DEFAULT_SPEED, DEFAULT_CHUNK_RES, DEFAULT_CHUNK_WORLD_SIZE, DEFAULT_FOG_START, DEFAULT_FOG_END, DEFAULT_TARGET_FPS, DEFAULT_LOD, DEFAULT_NOISE
+from flight.config import (
+    DEFAULT_HEIGHT_OFFSET,
+    DEFAULT_SEED,
+    DEFAULT_SPEED,
+    DEFAULT_CHUNK_RES,
+    DEFAULT_CHUNK_WORLD_SIZE,
+    DEFAULT_FOG_START,
+    DEFAULT_FOG_END,
+    DEFAULT_TARGET_FPS,
+    DEFAULT_LOD,
+    DEFAULT_NOISE,
+    DEFAULT_TEXTURES,
+    DEFAULT_TEX_SCALE,
+    DEFAULT_FAR_FADE,
+)
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="flight", description="Infinite flight over mountains (ModernGL + pygame)")
@@ -21,6 +35,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--lod", dest="lod", action="store_true", default=DEFAULT_LOD, help="enable LOD rings (default on)")
     p.add_argument("--no-lod", dest="lod", action="store_false", help="disable LOD rings")
     p.add_argument("--noise", choices=["fast","simplex"], default=DEFAULT_NOISE, help="height noise mode (fast or simplex)")
+    p.add_argument("--textures", dest="textures", action="store_true", default=DEFAULT_TEXTURES, help="enable terrain textures (v0.4 default on)")
+    p.add_argument("--no-textures", dest="textures", action="store_false", help="disable terrain textures")
+    p.add_argument("--tex-scale", type=float, default=DEFAULT_TEX_SCALE, help="terrain texture scale (world->UV, lower=safer)")
+    p.add_argument("--far-fade", type=float, default=DEFAULT_FAR_FADE, help="extra fog fade for far LOD ring (0..1, lower=foggier)")
     return p.parse_args()
 
 def main() -> None:
@@ -43,4 +61,7 @@ def main() -> None:
         chunk_size=float(args.chunk_size),
         fog_start=float(args.fog_start),
         fog_end=float(args.fog_end),
+        textures=bool(args.textures),
+        tex_scale=float(args.tex_scale),
+        far_fade=float(args.far_fade),
     )

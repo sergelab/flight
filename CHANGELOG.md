@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.0
+- Добавлено стабильное текстурирование террейна (Variant B):
+  - 2 tile-текстуры (grass/rock) генерируются в рантайме
+  - включён mipmapping + trilinear фильтрация (уменьшает shimmer)
+  - смешивание материалов по высоте/уклону (без процедурных высоких частот)
+- Product LOD: дальнее кольцо LOD чуть сильнее уходит в туман через `u_chunk_fade`
+- CLI:
+  - `--textures / --no-textures`
+  - `--tex-scale`
+  - `--far-fade`
+
+### Как проверить
+1) `poetry install`
+2) `poetry run flight --debug`
+3) По умолчанию должна появиться “зернистость” материала (grass/rock) без мерцания.
+4) Сравнение: `poetry run flight --no-textures`.
+5) При включении `--lod` переход дальнего кольца должен быть менее заметным.
+
 ## v0.3.0 (Final, Variant A: stability baseline)
 - Убраны источники мерцания (процедурные контуры/noise/мелкие детали в шейдере)
 - Зафиксирован базовый шейдер: palette-by-height + Lambert + fog (forward)

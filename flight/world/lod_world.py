@@ -46,7 +46,11 @@ class LODWorld:
         if far_budget > 0:
             self.far.ingest_ready(prog, max_per_frame=far_budget)
 
-    def draw(self, renderer) -> None:
-        # Draw far first then near
+    def draw(self, renderer, *, far_fade: float = 0.70) -> None:
+        """Draw far then near, with a small shader fade to hide LOD differences."""
+        if hasattr(renderer, "set_chunk_fade"):
+            renderer.set_chunk_fade(float(far_fade))
         self.far.draw(renderer)
+        if hasattr(renderer, "set_chunk_fade"):
+            renderer.set_chunk_fade(1.0)
         self.near.draw(renderer)
