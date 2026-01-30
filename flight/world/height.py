@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 import numpy as np
 
 from flight.world.noise import NoiseConfig, FBMFastNoise, FBMSimplexNoise
+
 
 @dataclass
 class HeightProvider:
@@ -12,7 +14,12 @@ class HeightProvider:
     def __post_init__(self) -> None:
         cfg = NoiseConfig()
         if self.mode == "simplex":
-            self.noise = FBMSimplexNoise(self.seed, cfg)
+            try:
+                self.noise = FBMSimplexNoise(self.seed, cfg)
+            except Exception:
+                # Fallback to fast if opensimplex isn't available
+                self.noise = FBMFastNoise(self.seed, cfg)
+                self.mode = "fast"
         else:
             self.noise = FBMFastNoise(self.seed, cfg)
 
@@ -20,10 +27,9 @@ class HeightProvider:
         return float(self.noise.value(x, z))
 
     def height_grid(self, x: np.ndarray, z: np.ndarray) -> np.ndarray:
-        # Vectorized (only supported for fast mode)
         if hasattr(self.noise, "grid"):
             return self.noise.grid(x.astype(np.float32), z.astype(np.float32)).astype(np.float32)
-        # fallback: slow scalar calls
+        # fallback slow scalar
         out = np.zeros_like(x, dtype=np.float32)
         it = np.nditer(out, flags=["multi_index"], op_flags=["readwrite"])
         while not it.finished:

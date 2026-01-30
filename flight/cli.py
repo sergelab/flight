@@ -17,6 +17,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--fog-start", type=float, default=DEFAULT_FOG_START, help="fog start distance")
     p.add_argument("--fog-end", type=float, default=DEFAULT_FOG_END, help="fog end distance")
     p.add_argument("--debug", action="store_true", help="enable debug overlay (HUD + logs)")
+    p.add_argument("--noise", choices=["fast","simplex"], default="fast", help="height noise mode (fast or simplex)")
     return p.parse_args()
 
 def main() -> None:
@@ -32,6 +33,7 @@ def main() -> None:
         height_offset=float(args.height_offset),
         wireframe=bool(args.wireframe),
         debug=bool(args.debug),
+        noise_mode=str(args.noise),
         chunk_res=int(args.chunk_res),
         chunk_size=float(args.chunk_size),
         fog_start=float(args.fog_start),

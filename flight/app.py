@@ -31,7 +31,15 @@ def _surface_to_rgba_bytes(surf: pygame.Surface) -> tuple[bytes, int, int]:
     data = pygame.image.tostring(s, "RGBA", False)
     return data, w, h
 
-def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, debug: bool, chunk_res: int, chunk_size: float, fog_start: float, fog_end: float) -> None:
+def _project_to_ndc(proj: np.ndarray, view: np.ndarray, world_point: np.ndarray) -> tuple[float, float]:
+    p = np.array([world_point[0], world_point[1], world_point[2], 1.0], dtype=np.float32)
+    clip = (proj @ (view @ p))
+    w = float(clip[3]) if float(clip[3]) != 0.0 else 1.0
+    ndc_x = float(clip[0] / w)
+    ndc_y = float(clip[1] / w)
+    return ndc_x, ndc_y
+
+def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, debug: bool, noise_mode: str, chunk_res: int, chunk_size: float, fog_start: float, fog_end: float) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
@@ -56,7 +64,7 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, d
 
     renderer = Renderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
 
-    hp = HeightProvider(seed=seed)
+    hp = HeightProvider(seed=seed, mode=str(noise_mode))
     cam = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
     cam.z = -30.0  # start slightly back so forward view has terrain
 
@@ -114,8 +122,13 @@ def run_app(*, seed: int, speed: float, height_offset: float, wireframe: bool, d
             world.ingest_ready(renderer.prog, max_per_frame=max_upload)
 
             renderer.begin_frame()
+            view = cam.view_matrix()
+            # Sun position on screen (project light direction into NDC)
+            sun_world = cam.eye() + light_dir * 1000.0
+            sun_ndc = _project_to_ndc(renderer.proj, view, sun_world)
+            renderer.draw_sky(sun_ndc)
             renderer.set_common_uniforms(
-                view=cam.view_matrix(),
+                view=view,
                 cam_pos=cam.eye(),
                 light_dir=light_dir,
                 fog_start=fog_start,

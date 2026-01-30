@@ -20,20 +20,18 @@ def build_chunk_vertices(cx: int, cz: int, res: int, world_size: float, height_p
 
     xs = (x0 + np.arange(res, dtype=np.float32) * step)
     zs = (z0 + np.arange(res, dtype=np.float32) * step)
-    grid_x, grid_z = np.meshgrid(xs, zs, indexing="xy")  # (res,res)
+    grid_x, grid_z = np.meshgrid(xs, zs, indexing="xy")
 
-    # Vectorized height sampling (fast path)
     if hasattr(height_provider, "height_grid"):
         h = height_provider.height_grid(grid_x, grid_z).astype(np.float32)
     else:
-        # fallback: callable height_fn(x,z)
+        # callable fallback
         height_fn = height_provider
         h = np.zeros((res, res), dtype=np.float32)
         for j in range(res):
             for i in range(res):
                 h[j, i] = float(height_fn(float(grid_x[j, i]), float(grid_z[j, i])))
 
-    # Central differences for normals (vectorized)
     dhdx = np.zeros_like(h)
     dhdz = np.zeros_like(h)
     dhdx[:, 1:-1] = (h[:, 2:] - h[:, :-2]) / (2 * step)

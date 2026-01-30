@@ -6,6 +6,38 @@ import numpy as np
 from flight.render.shaders import shader_sources
 from flight.util.math import perspective
 
+_SKY_VERT = """#version 150
+in vec2 in_pos;
+out vec2 v_uv;
+void main() {
+    v_uv = in_pos * 0.5 + 0.5;
+    gl_Position = vec4(in_pos, 0.0, 1.0);
+}
+"""
+
+_SKY_FRAG = """#version 150
+in vec2 v_uv;
+uniform vec2 u_sun_ndc;
+out vec4 f_color;
+
+void main() {
+    // Gradient: horizon -> zenith
+    vec3 horizon = vec3(0.78, 0.86, 0.96);
+    vec3 zenith  = vec3(0.40, 0.60, 0.85);
+    float t = smoothstep(0.0, 1.0, v_uv.y);
+    vec3 col = mix(horizon, zenith, t);
+
+    // Sun disc (in NDC)
+    vec2 ndc = vec2(v_uv.x * 2.0 - 1.0, v_uv.y * 2.0 - 1.0);
+    float d = length(ndc - u_sun_ndc);
+    float disc = 1.0 - smoothstep(0.05, 0.08, d);
+    float glow = 1.0 - smoothstep(0.10, 0.35, d);
+    col += vec3(1.0, 0.95, 0.80) * (disc * 0.75 + glow * 0.12);
+
+    f_color = vec4(col, 1.0);
+}
+"""
+
 _HUD_VERT = """#version 150
 in vec2 in_pos;
 in vec2 in_uv;
@@ -33,15 +65,27 @@ class Renderer:
 
         vert, frag = shader_sources(ctx.version_code)
         self.prog = self.ctx.program(vertex_shader=vert, fragment_shader=frag)
-        self.prog["u_proj"].write(perspective(70.0, width / height, 0.1, 800.0).tobytes())
+
+        self._proj = perspective(70.0, width / height, 0.1, 800.0).astype(np.float32)
+        self.prog["u_proj"].write(self._proj.tobytes())
 
         self.ctx.enable(moderngl.DEPTH_TEST)
-        self.ctx.disable(moderngl.CULL_FACE)  # safe default for now
+        self.ctx.disable(moderngl.CULL_FACE)
+
+        # Sky quad
+        self._sky_prog = self.ctx.program(vertex_shader=_SKY_VERT, fragment_shader=_SKY_FRAG)
+        sky = np.array([
+            -1.0, -1.0,
+             1.0, -1.0,
+            -1.0,  1.0,
+             1.0,  1.0,
+        ], dtype=np.float32)
+        self._sky_vbo = self.ctx.buffer(sky.tobytes())
+        self._sky_vao = self.ctx.vertex_array(self._sky_prog, [(self._sky_vbo, "2f", "in_pos")])
 
         # HUD quad (top-left)
         self._hud_prog = self.ctx.program(vertex_shader=_HUD_VERT, fragment_shader=_HUD_FRAG)
         quad = np.array([
-            # x, y, u, v  (top-left box)
             -0.98,  0.98, 0.0, 1.0,
             -0.20,  0.98, 1.0, 1.0,
             -0.98,  0.70, 0.0, 0.0,
@@ -52,12 +96,15 @@ class Renderer:
         ], dtype=np.float32)
         self._hud_vbo = self.ctx.buffer(quad.tobytes())
         self._hud_vao = self.ctx.vertex_array(self._hud_prog, [(self._hud_vbo, "2f 2f", "in_pos", "in_uv")])
-
         self._hud_tex: moderngl.Texture | None = None
         self._hud_tex_size = (0, 0)
 
+    @property
+    def proj(self) -> np.ndarray:
+        return self._proj
+
     def release(self) -> None:
-        for obj in [self._hud_vao, self._hud_vbo, self._hud_prog, self.prog]:
+        for obj in [self._sky_vao, self._sky_vbo, self._sky_prog, self._hud_vao, self._hud_vbo, self._hud_prog, self.prog]:
             try:
                 obj.release()
             except Exception:
@@ -72,10 +119,18 @@ class Renderer:
         self.width = width
         self.height = height
         self.ctx.viewport = (0, 0, width, height)
-        self.prog["u_proj"].write(perspective(70.0, width / height, 0.1, 800.0).tobytes())
+        self._proj = perspective(70.0, width / height, 0.1, 800.0).astype(np.float32)
+        self.prog["u_proj"].write(self._proj.tobytes())
 
     def begin_frame(self) -> None:
+        # Clear is mostly hidden by sky quad, but keep for safety
         self.ctx.clear(0.70, 0.80, 0.92, 1.0)
+
+    def draw_sky(self, sun_ndc: tuple[float, float]) -> None:
+        self.ctx.disable(moderngl.DEPTH_TEST)
+        self._sky_prog["u_sun_ndc"].value = (float(sun_ndc[0]), float(sun_ndc[1]))
+        self._sky_vao.render(mode=moderngl.TRIANGLE_STRIP)
+        self.ctx.enable(moderngl.DEPTH_TEST)
 
     def set_common_uniforms(self, view: np.ndarray, cam_pos: np.ndarray, light_dir: np.ndarray, fog_start: float, fog_end: float) -> None:
         self.prog["u_view"].write(view.astype(np.float32).tobytes())

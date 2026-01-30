@@ -12,3 +12,6 @@
 
 - Tech
   - `/docs/tech/apply_archives.md` — как применять архивы с правками
+
+- Render
+  - Sky quad: небо/солнце как ориентир (см. `flight/render/renderer.py`)

@@ -38,3 +38,5 @@ poetry run flight --debug
 - `--chunk-res`
 - `--chunk-size`
 - `--fog-start` / `--fog-end`
+
+- `--noise fast|simplex` (режим шума высот)
