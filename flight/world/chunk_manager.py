@@ -13,7 +13,7 @@ from flight.world.mesh_builder import build_chunk_vertices
 class CPUChunk:
     cx: int
     cz: int
-    vbo_data: np.ndarray  # float32 (N,6)
+    vbo_data: np.ndarray  # float32 (N,7) => pos(3), norm(3), water(1)
     ibo_data: np.ndarray  # uint32 (M,)
 
 class ChunkManager:

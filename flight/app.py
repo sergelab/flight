@@ -185,6 +185,7 @@ def run_app(
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
                         f"far:  res={far.chunk_res} chunks={len(world.far.chunks)} pending={pending_far}",
                         f"fog={fog_start:.0f}->{fog_end:.0f} chunk_size={chunk_size:.1f}",
+                        f"water_level={getattr(hp, 'water_level', 0.0):.1f}",
                     ]
                     pad = 6
                     line_h = font.get_linesize()

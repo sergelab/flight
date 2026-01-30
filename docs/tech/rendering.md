@@ -15,6 +15,7 @@
 
 ## Шейдер поверхности (baseline v0.3)
 - **Цвет по высоте**: простая палитра low->green, mid->gray, high->white
+- **Вода (v0.3)**: дополнительная маска `water` (реки/озёра) подмешивает синие цвета
 - **Освещение**: Lambert diffuse + постоянный ambient
 - **Туман**: forward fog по `dist = max(z_world - z_cam, 0)`
 

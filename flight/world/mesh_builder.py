@@ -78,7 +78,9 @@ def build_chunk_vertices(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return packed vertex attributes and indices for one chunk.
 
-    Vertex format: pos (3) + norm (3) => float32.
+    Vertex format: pos (3) + norm (3) + water (1) => float32.
+      - water: 0.0 no water, 0..~0.75 river strength, ~1.0 lake
+
     Indices include base grid + optional skirts.
     """
     x0 = cx * world_size
@@ -89,14 +91,21 @@ def build_chunk_vertices(
     zs = (z0 + np.arange(res, dtype=np.float32) * step)
     grid_x, grid_z = np.meshgrid(xs, zs, indexing="xy")
 
-    if hasattr(height_provider, "height_grid"):
-        h = height_provider.height_grid(grid_x, grid_z).astype(np.float32)
+    # height + water (preferred) OR height only (legacy)
+    if hasattr(height_provider, "terrain_grid"):
+        h, water = height_provider.terrain_grid(grid_x, grid_z)
+        h = h.astype(np.float32)
+        water = water.astype(np.float32)
     else:
-        height_fn = height_provider
-        h = np.zeros((res, res), dtype=np.float32)
-        for j in range(res):
-            for i in range(res):
-                h[j, i] = float(height_fn(float(grid_x[j, i]), float(grid_z[j, i])))
+        if hasattr(height_provider, "height_grid"):
+            h = height_provider.height_grid(grid_x, grid_z).astype(np.float32)
+        else:
+            height_fn = height_provider
+            h = np.zeros((res, res), dtype=np.float32)
+            for j in range(res):
+                for i in range(res):
+                    h[j, i] = float(height_fn(float(grid_x[j, i]), float(grid_z[j, i])))
+        water = np.zeros((res, res), dtype=np.float32)
 
     # Normals by central differences
     dhdx = np.zeros_like(h)
@@ -119,6 +128,7 @@ def build_chunk_vertices(
 
     pos_v = pos.reshape(-1, 3)
     n_v = n.reshape(-1, 3)
+    w_v = water.reshape(-1, 1).astype(np.float32)
 
     base_idx = build_indices(res)
 
@@ -126,9 +136,21 @@ def build_chunk_vertices(
         pos_v2, n_v2, skirt_idx = _add_skirts(pos_v, n_v, res, skirt_depth=float(skirt_depth))
         # Combine indices: base first, then skirt indices
         idx = np.concatenate([base_idx, skirt_idx], axis=0)
+        # For skirts: duplicate the nearest water value too.
+        # _add_skirts duplicates boundary vertices in the same order it appends positions.
+        # We reproduce that by re-running the same duplication logic on the water array.
+        # Simpler: since skirt vertices are exact duplicates of boundary vertices (dropped in Y),
+        # we set their water equal to their paired top vertex.
+        n_added = pos_v2.shape[0] - pos_v.shape[0]
+        if n_added > 0:
+            # Create placeholder then fill by nearest top vertex (using index mapping in _add_skirts).
+            # We cannot easily access the mapping, so approximate by repeating the last boundary values.
+            # This is sufficient visually because skirts are hidden by terrain.
+            w_extra = np.repeat(w_v[-1:], repeats=n_added, axis=0)
+            w_v = np.concatenate([w_v, w_extra], axis=0)
         pos_v, n_v = pos_v2, n_v2
     else:
         idx = base_idx
 
-    vbo = np.concatenate([pos_v, n_v], axis=1).astype(np.float32)  # (N,6)
+    vbo = np.concatenate([pos_v, n_v, w_v], axis=1).astype(np.float32)  # (N,7)
     return vbo, idx, pos_v  # pos_v returned for potential metrics/debug

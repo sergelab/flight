@@ -16,6 +16,7 @@ def _pick_glsl_version(ctx_version_code: int) -> int:
 _VERT_BODY = """
 in vec3 in_pos;
 in vec3 in_norm;
+in float in_water;
 
 uniform mat4 u_proj;
 uniform mat4 u_view;
@@ -23,11 +24,13 @@ uniform mat4 u_view;
 out vec3 v_world_pos;
 out vec3 v_norm;
 out float v_height;
+out float v_water;
 
 void main() {
     v_world_pos = in_pos;
     v_norm = in_norm;
     v_height = in_pos.y;
+    v_water = in_water;
     gl_Position = u_proj * u_view * vec4(in_pos, 1.0);
 }
 """
@@ -35,6 +38,7 @@ void main() {
 _FRAG_BODY = """in vec3 v_world_pos;
 in vec3 v_norm;
 in float v_height;
+in float v_water;
 
 uniform vec3 u_light_dir;
 uniform vec3 u_cam_pos;
@@ -60,6 +64,18 @@ void main() {
     float diff = max(dot(n, l), 0.0);
 
     vec3 base = height_color(v_height);
+
+    // Water overlay (v0.3):
+    //  - v_water ~1.0 => lake
+    //  - v_water (0..~0.75) => river strength
+    // Clean, low-frequency mask only (Variant A stability).
+    float lake = smoothstep(0.90, 1.00, v_water);
+    float river = smoothstep(0.10, 0.65, v_water) * (1.0 - lake);
+    vec3 river_col = vec3(0.10, 0.32, 0.60);
+    vec3 lake_col  = vec3(0.05, 0.18, 0.36);
+    vec3 water_col = mix(river_col, lake_col, lake);
+    float water_amt = clamp(river + lake, 0.0, 1.0);
+    base = mix(base, water_col, water_amt);
 
     // Forward distance (camera moves +Z)
     float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);

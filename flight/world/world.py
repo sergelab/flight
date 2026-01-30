@@ -105,7 +105,7 @@ class World:
             vao = self.ctx.vertex_array(
                 prog,
                 [
-                    (vbo, "3f 3f", "in_pos", "in_norm"),
+                    (vbo, "3f 3f 1f", "in_pos", "in_norm", "in_water"),
                 ],
                 self._ibo,
             )
