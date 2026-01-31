@@ -9,6 +9,10 @@ from flight.config import (
     WINDOW_WIDTH, WINDOW_HEIGHT, FPS_CAP,
     CHUNKS_X, CHUNKS_Z_BEHIND, CHUNKS_Z_AHEAD,
     HEIGHT_SMOOTH_K, LIGHT_DIR,
+    APP_VERSION,
+    DEFAULT_MAX_YAW_RATE_SLOW,
+    DEFAULT_MAX_YAW_RATE_FAST,
+    DEFAULT_TURN_RATE,
 )
 from flight.render.camera import CameraRail, CameraFlight
 from flight.render.renderer import Renderer
@@ -34,7 +38,10 @@ def _surface_to_rgba_bytes(surf: pygame.Surface) -> tuple[bytes, int, int]:
 def run_app(
     *,
     seed: int,
-    speed: float,
+    max_speed: float,
+    accel: float,
+    brake: float,
+    drag: float,
     height_offset: float,
     wireframe: bool,
     debug: bool,
@@ -49,12 +56,25 @@ def run_app(
     tree_density: float,
     auto: bool,
     turn_rate: float,
+    yaw_rate_slow: float,
+    yaw_rate_fast: float,
+    yaw_accel: float,
+    yaw_decel: float,
+    yaw_drag: float,
+    bank_gain: float,
+    bank_max: float,
+    bank_smooth_k: float,
+    input_smooth_k: float,
+    cam_yaw_smooth_k: float,
+    pitch_gain: float,
+    pitch_max: float,
+    pitch_smooth_k: float,
 ) -> None:
     _init_pygame_gl()
 
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
-    pygame.display.set_caption(f"flight v0.8.2 (seed={seed})")
+    pygame.display.set_caption(f"flight v{APP_VERSION} (seed={seed})")
 
     try:
         ctx = moderngl.create_context()
@@ -74,10 +94,40 @@ def run_app(
     hp = HeightProvider(seed=seed, mode=str(noise_mode))
     # Camera
     if auto:
-        cam: CameraRail | CameraFlight = CameraRail(speed=speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
+        cam: CameraRail | CameraFlight = CameraRail(speed=max_speed, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
         cam.z = -30.0
     else:
-        cam = CameraFlight(speed=speed, turn_rate=turn_rate, height_offset=height_offset, smooth_k=HEIGHT_SMOOTH_K)
+        # Compatibility: if user explicitly tweaks --turn-rate (v0.8) but leaves yaw caps default,
+        # reuse it as a single cap.
+        if (
+            abs(yaw_rate_slow - DEFAULT_MAX_YAW_RATE_SLOW) < 1e-6
+            and abs(yaw_rate_fast - DEFAULT_MAX_YAW_RATE_FAST) < 1e-6
+            and abs(turn_rate - DEFAULT_TURN_RATE) > 1e-6
+        ):
+            yaw_rate_slow = float(turn_rate)
+            yaw_rate_fast = float(turn_rate)
+
+        cam = CameraFlight(
+            max_speed=max_speed,
+            accel=accel,
+            brake=brake,
+            drag=drag,
+            max_yaw_rate_slow=yaw_rate_slow,
+            max_yaw_rate_fast=yaw_rate_fast,
+            yaw_accel=yaw_accel,
+            yaw_decel=yaw_decel,
+            yaw_drag=yaw_drag,
+            bank_gain=bank_gain,
+            bank_max=bank_max,
+            bank_smooth_k=bank_smooth_k,
+            input_smooth_k=input_smooth_k,
+            cam_yaw_smooth_k=cam_yaw_smooth_k,
+            pitch_gain=pitch_gain,
+            pitch_max=pitch_max,
+            pitch_smooth_k=pitch_smooth_k,
+            height_offset=height_offset,
+            smooth_k=HEIGHT_SMOOTH_K,
+        )
         cam.z = -30.0
 
     # LOD params (A: FPS first)
@@ -211,9 +261,13 @@ def run_app(
                     pending_near = len(getattr(world.near.cm, "pending", []))
                     pending_far = len(getattr(world.far.cm, "pending", []))
                     lines = [
-                        "flight v0.8.2 (trees variant C)",
+                        f"flight v{APP_VERSION} (core flight feel)",
                         f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target} auto={'on' if auto else 'off'}",
-                        f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}",
+                        (
+                            f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}"
+                            if not isinstance(cam, CameraFlight)
+                            else f"z={cam.z:.1f} y={cam.y:.1f} v={cam.speed:.1f} yaw_rate={cam.yaw_rate:.2f} bank={cam.bank:.2f} fps~{fps_est:.0f} upload/frame={max_upload}"
+                        ),
                         f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
                         f"far:  res={far.chunk_res} chunks={len(world.far.chunks)} pending={pending_far}",
                         f"fog={fog_start:.0f}->{fog_end:.0f} chunk_size={chunk_size:.1f}",
