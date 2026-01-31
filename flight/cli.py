@@ -23,6 +23,7 @@ from flight.config import (
     DEFAULT_BANK_SMOOTH_K,
     DEFAULT_INPUT_SMOOTH_K,
     DEFAULT_CAM_YAW_SMOOTH_K,
+    DEFAULT_CLIMB_RATE,
     DEFAULT_PITCH_GAIN,
     DEFAULT_PITCH_MAX,
     DEFAULT_PITCH_SMOOTH_K,
@@ -88,6 +89,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--bank-smooth", type=float, default=DEFAULT_BANK_SMOOTH_K, help="bank smoothing (1/sec)")
     p.add_argument("--input-smooth", type=float, default=DEFAULT_INPUT_SMOOTH_K, help="smooth arrow inputs (1/sec), lower = heavier")
     p.add_argument("--cam-yaw-smooth", type=float, default=DEFAULT_CAM_YAW_SMOOTH_K, help="camera yaw lag smoothing (1/sec)")
+    p.add_argument("--climb-rate", type=float, default=DEFAULT_CLIMB_RATE, help="manual vertical climb rate (units/sec) for q/a")
     p.add_argument("--pitch-gain", type=float, default=DEFAULT_PITCH_GAIN, help="visual pitch per longitudinal accel (rad per (unit/sec^2))")
     p.add_argument("--pitch-max", type=float, default=DEFAULT_PITCH_MAX, help="max visual pitch (radians)")
     p.add_argument("--pitch-smooth", type=float, default=DEFAULT_PITCH_SMOOTH_K, help="visual pitch smoothing (1/sec)")
@@ -130,6 +132,7 @@ def main() -> None:
         bank_smooth_k=float(args.bank_smooth),
         input_smooth_k=float(args.input_smooth),
         cam_yaw_smooth_k=float(args.cam_yaw_smooth),
+        climb_rate=float(args.climb_rate),
         pitch_gain=float(args.pitch_gain),
         pitch_max=float(args.pitch_max),
         pitch_smooth_k=float(args.pitch_smooth),

@@ -61,6 +61,7 @@ poetry run flight
 **Сглаживание цифрового ввода и "вес" камеры**
 - `--input-smooth <float>` — сглаживание стрелок (1/sec). Меньше = тяжелее, больше = резче.
 - `--cam-yaw-smooth <float>` — лаг yaw камеры (1/sec). Меньше = тяжелее.
+- `--climb-rate <float>` — скорость набора/снижения высоты для Q/A (units/sec).
 - `--pitch-gain <float>` — визуальный pitch от продольного ускорения.
 - `--pitch-max <float>` — max pitch (radians).
 - `--pitch-smooth <float>` — сглаживание pitch (1/sec).
@@ -75,7 +76,7 @@ poetry run flight
 ```bash
 poetry run flight
 ```
-Управление: ↑ вперёд, ↓ назад, ←/→ поворот, Esc выход.
+Управление: ↑ вперёд, ↓ назад, ←/→ поворот, Q/A вверх/вниз, Esc выход.
 
 ### «Тяжёлый» полёт (больше массы)
 ```bash

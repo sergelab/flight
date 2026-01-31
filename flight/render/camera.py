@@ -101,10 +101,12 @@ class CameraFlight:
         bank_smooth_k: float,
         input_smooth_k: float,
         cam_yaw_smooth_k: float,
+        climb_rate: float,
         pitch_gain: float,
         pitch_max: float,
         pitch_smooth_k: float,
         height_offset: float,
+        min_clearance: float,
         smooth_k: float,
     ) -> None:
         # Linear
@@ -128,12 +130,14 @@ class CameraFlight:
         # Input + view smoothing
         self.input_smooth_k = float(input_smooth_k)
         self.cam_yaw_smooth_k = float(cam_yaw_smooth_k)
+        self.climb_rate = float(climb_rate)
         self.pitch_gain = float(pitch_gain)
         self.pitch_max = float(pitch_max)
         self.pitch_smooth_k = float(pitch_smooth_k)
 
         # Terrain follow
         self.height_offset = float(height_offset)
+        self.min_clearance = float(min_clearance)
         self.smooth_k = float(smooth_k)
 
         # State
@@ -151,6 +155,7 @@ class CameraFlight:
         self._cam_yaw = 0.0
         self._pitch = 0.0
         self._prev_speed = 0.0
+        self._lift = 0.0
 
         # View tuning
         self.look_ahead = 60.0
@@ -162,22 +167,25 @@ class CameraFlight:
         c = float(np.cos(self.yaw))
         return np.array([s, 0.0, c], dtype=np.float32)
 
-    def update(self, dt: float, height_fn, *, forward: float, turn: float) -> None:
+    def update(self, dt: float, height_fn, *, forward: float, turn: float, lift: float = 0.0, water_level: float | None = None) -> None:
         """Update camera.
 
         Args:
             forward: -1..1 (back..forward)
             turn: -1..1 (left..right)
+            lift: -1..1 (down..up)
         """
 
         dt = float(dt)
         forward = _clamp(float(forward), -1.0, 1.0)
         turn = _clamp(float(turn), -1.0, 1.0)
+        lift = _clamp(float(lift), -1.0, 1.0)
 
         # Smooth digital inputs so arrow keys don't feel like on/off switches.
         # This is critical for perceiving inertia even with modest accel limits.
         self._throttle = exp_smooth(self._throttle, forward, self.input_smooth_k, dt)
         self._turn = exp_smooth(self._turn, turn, self.input_smooth_k, dt)
+        self._lift = exp_smooth(self._lift, lift, self.input_smooth_k, dt)
 
         # --- Linear: speed follows throttle with accel/brake and drag.
         speed_target = self._throttle * self.max_speed
@@ -229,7 +237,20 @@ class CameraFlight:
         self._pitch = exp_smooth(self._pitch, pitch_target, self.pitch_smooth_k, dt)
 
         # Height follow.
-        y_target = float(height_fn(self.x, self.z)) + self.height_offset
+        base_h = float(height_fn(self.x, self.z))
+        base_floor = max(base_h, float(water_level)) if water_level is not None else base_h
+        floor_h = base_floor + self.min_clearance
+
+        if self._lift != 0.0:
+            self.height_offset += self._lift * self.climb_rate * dt
+
+        min_offset = max(0.0, floor_h - base_h)
+        if self.height_offset < min_offset:
+            self.height_offset = min_offset
+
+        y_target = base_h + self.height_offset
+        if y_target < floor_h:
+            y_target = floor_h
         self.y = exp_smooth(self.y, y_target, self.smooth_k, dt)
 
     def eye(self) -> np.ndarray:

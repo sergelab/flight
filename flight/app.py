@@ -13,6 +13,7 @@ from flight.config import (
     DEFAULT_MAX_YAW_RATE_SLOW,
     DEFAULT_MAX_YAW_RATE_FAST,
     DEFAULT_TURN_RATE,
+    DEFAULT_MIN_CLEARANCE,
 )
 from flight.render.camera import CameraRail, CameraFlight
 from flight.render.renderer import Renderer
@@ -66,6 +67,7 @@ def run_app(
     bank_smooth_k: float,
     input_smooth_k: float,
     cam_yaw_smooth_k: float,
+    climb_rate: float,
     pitch_gain: float,
     pitch_max: float,
     pitch_smooth_k: float,
@@ -122,10 +124,12 @@ def run_app(
             bank_smooth_k=bank_smooth_k,
             input_smooth_k=input_smooth_k,
             cam_yaw_smooth_k=cam_yaw_smooth_k,
+            climb_rate=climb_rate,
             pitch_gain=pitch_gain,
             pitch_max=pitch_max,
             pitch_smooth_k=pitch_smooth_k,
             height_offset=height_offset,
+            min_clearance=DEFAULT_MIN_CLEARANCE,
             smooth_k=HEIGHT_SMOOTH_K,
         )
         cam.z = -30.0
@@ -209,7 +213,13 @@ def run_app(
                 if keys[pygame.K_RIGHT]:
                     turn += 1.0
 
-                cam.update(dt, hp.height_at, forward=fwd, turn=turn)
+                lift = 0.0
+                if keys[pygame.K_q]:
+                    lift += 1.0
+                if keys[pygame.K_a]:
+                    lift -= 1.0
+
+                cam.update(dt, hp.height_at, forward=fwd, turn=turn, lift=lift, water_level=float(hp.water_level))
             else:
                 cam.update(dt, hp.height_at)
 

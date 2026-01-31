@@ -13,6 +13,7 @@ DEFAULT_SEED = 12345
 DEFAULT_SPEED = 20.0  # legacy name; now interpreted as max forward speed
 DEFAULT_HEIGHT_OFFSET = 15.0
 HEIGHT_SMOOTH_K = 8.0  # larger = faster follow
+DEFAULT_MIN_CLEARANCE = 0.8  # minimal clearance above ground/water to avoid clipping
 
 # Controls
 # v0.8: manual flight controls (arrow keys)
@@ -42,6 +43,9 @@ DEFAULT_BANK_SMOOTH_K = 5.5
 # k is the exponential smoothing constant; smaller = heavier/laggier response.
 DEFAULT_INPUT_SMOOTH_K = 3.5
 DEFAULT_CAM_YAW_SMOOTH_K = 3.0
+
+# Vertical (height) control
+DEFAULT_CLIMB_RATE = 10.0  # units/sec for q/a lift control
 
 # Longitudinal acceleration cue (visual pitch). Values are subtle.
 DEFAULT_PITCH_GAIN = 0.012
