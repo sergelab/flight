@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flight"
-version = "0.9.2"
+version = "0.9.3"
 description = "Infinite flight over procedurally generated mountains (ModernGL + pygame)"
 authors = ["Project Team <dev@example.com>"]
 readme = "README.md"

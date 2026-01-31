@@ -6,7 +6,7 @@ WINDOW_HEIGHT = 720
 FPS_CAP = 0  # 0 = uncapped
 
 # App
-APP_VERSION = "0.9.2"
+APP_VERSION = "0.9.3"
 
 # Flight
 DEFAULT_SEED = 12345

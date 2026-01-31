@@ -212,7 +212,9 @@ class CameraFlight:
             self.z += float(fwd[2]) * self.speed * dt
 
         # --- Camera reaction: bank into turn.
-        bank_target = _clamp(self.yaw_rate * self.bank_gain * speed_norm, -self.bank_max, self.bank_max)
+        # NOTE: yaw_rate already includes a sign flip to match intuitive left/right input.
+        # Bank should visually lean *into* the perceived turn direction, so we flip the sign here.
+        bank_target = _clamp(-self.yaw_rate * self.bank_gain * speed_norm, -self.bank_max, self.bank_max)
         self.bank = exp_smooth(self.bank, bank_target, self.bank_smooth_k, dt)
 
         # Visual cue: pitch on longitudinal acceleration.
