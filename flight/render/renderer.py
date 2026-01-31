@@ -201,7 +201,7 @@ class Renderer:
             self.prog["u_chunk_fade"].value = float(fade)
 
     def draw_chunk(self, vao: moderngl.VertexArray) -> None:
-            vao.render()
+        vao.render()
 
     # --- Trees ---
     def make_tree_vao(self, instance_vbo: moderngl.Buffer) -> moderngl.VertexArray:
