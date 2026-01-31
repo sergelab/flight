@@ -87,8 +87,9 @@ void main() {
     float ambient = 0.45;
     vec3 col = base * (ambient + 0.95 * diff);
 
-    // Fog based on forward distance (camera moves +Z)
-    float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);
+    // Fog based on horizontal distance in any direction (XZ plane)
+    vec2 d = v_world_pos.xz - u_cam_pos.xz;
+    float dist = length(d);
     float fog_amount = smoothstep(u_fog_start, u_fog_end, dist);
     vec3 fog_col = vec3(0.70, 0.80, 0.92);
     col = mix(col, fog_col, fog_amount);

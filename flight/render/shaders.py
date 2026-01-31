@@ -129,8 +129,9 @@ void main() {
 
     base = mix(land_base, water_shaded, water_amt);
 
-    // Forward distance (camera moves +Z)
-    float dist = max(v_world_pos.z - u_cam_pos.z, 0.0);
+    // Horizontal distance in any direction (XZ plane)
+    vec2 d = v_world_pos.xz - u_cam_pos.xz;
+    float dist = length(d);
 
     // Simple lighting: more ambient for readability (Variant A)
     float ambient = 0.55;
