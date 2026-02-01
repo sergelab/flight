@@ -105,16 +105,16 @@ class Renderer:
         self._sky_vbo = self.ctx.buffer(sky.tobytes())
         self._sky_vao = self.ctx.vertex_array(self._sky_prog, [(self._sky_vbo, "2f", "in_pos")])
 
-        # HUD quad (top-left)
+        # HUD quad (left side, tall for vertical scale)
         self._hud_prog = self.ctx.program(vertex_shader=_HUD_VERT, fragment_shader=_HUD_FRAG)
         quad = np.array([
-            -0.98,  0.98, 0.0, 1.0,
-            -0.20,  0.98, 1.0, 1.0,
-            -0.98,  0.70, 0.0, 0.0,
+            -0.98,  0.95, 0.0, 1.0,
+            -0.78,  0.95, 1.0, 1.0,
+            -0.98, -0.95, 0.0, 0.0,
 
-            -0.20,  0.98, 1.0, 1.0,
-            -0.20,  0.70, 1.0, 0.0,
-            -0.98,  0.70, 0.0, 0.0,
+            -0.78,  0.95, 1.0, 1.0,
+            -0.78, -0.95, 1.0, 0.0,
+            -0.98, -0.95, 0.0, 0.0,
         ], dtype=np.float32)
         self._hud_vbo = self.ctx.buffer(quad.tobytes())
         self._hud_vao = self.ctx.vertex_array(self._hud_prog, [(self._hud_vbo, "2f 2f", "in_pos", "in_uv")])

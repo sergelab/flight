@@ -33,7 +33,8 @@ def _init_pygame_gl() -> None:
 def _surface_to_rgba_bytes(surf: pygame.Surface) -> tuple[bytes, int, int]:
     s = surf.convert_alpha()
     w, h = s.get_size()
-    data = pygame.image.tostring(s, "RGBA", False)
+    # Flip vertically so Pygame (top-left origin) matches GL texture coord convention
+    data = pygame.image.tostring(s, "RGBA", True)
     return data, w, h
 
 def run_app(
@@ -71,9 +72,9 @@ def run_app(
     pitch_gain: float,
     pitch_max: float,
     pitch_smooth_k: float,
+    hud: bool,
 ) -> None:
     _init_pygame_gl()
-
     flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
     pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
     pygame.display.set_caption(f"flight v{APP_VERSION} (seed={seed})")
@@ -264,41 +265,56 @@ def run_app(
             )
             world.draw(renderer)
 
-            # HUD/logs
-            if debug and hasattr(renderer, "hud_update_rgba") and hasattr(renderer, "draw_hud"):
+            # HUD: always show altitude above sea level as a vertical scale
+            if hasattr(renderer, "hud_update_rgba") and hasattr(renderer, "draw_hud"):
                 if now - last_hud >= 0.12:
                     last_hud = now
-                    pending_near = len(getattr(world.near.cm, "pending", []))
-                    pending_far = len(getattr(world.far.cm, "pending", []))
-                    lines = [
-                        f"flight v{APP_VERSION} (core flight feel)",
-                        f"seed={seed} noise={noise_mode} lod={'on' if lod else 'off'} target_fps={target} auto={'on' if auto else 'off'}",
-                        (
-                            f"z={cam.z:.1f} y={cam.y:.1f} fps~{fps_est:.0f} upload/frame={max_upload}"
-                            if not isinstance(cam, CameraFlight)
-                            else f"z={cam.z:.1f} y={cam.y:.1f} v={cam.speed:.1f} yaw_rate={cam.yaw_rate:.2f} bank={cam.bank:.2f} fps~{fps_est:.0f} upload/frame={max_upload}"
-                        ),
-                        f"near: res={near.chunk_res} chunks={len(world.near.chunks)} pending={pending_near}",
-                        f"far:  res={far.chunk_res} chunks={len(world.far.chunks)} pending={pending_far}",
-                        f"fog={fog_start:.0f}->{fog_end:.0f} chunk_size={chunk_size:.1f}",
-                        f"water_level={getattr(hp, 'water_level', 0.0):.1f}",
-                    ]
-                    pad = 6
-                    line_h = font.get_linesize()
-                    w = max(font.size(line)[0] for line in lines) + pad * 2
-                    h = line_h * len(lines) + pad * 2
-                    surf = pygame.Surface((w, h), pygame.SRCALPHA)
-                    surf.fill((0, 0, 0, 130))
-                    y = pad
-                    for line in lines:
-                        img = font.render(line, True, (255, 255, 255))
-                        surf.blit(img, (pad, y))
-                        y += line_h
-                    rgba, tw, th = _surface_to_rgba_bytes(surf)
+                    gauge_w = 110
+                    gauge_h = 440
+                    gauge = pygame.Surface((gauge_w, gauge_h), pygame.SRCALPHA)
+                    gauge.fill((0, 0, 0, 0))
+
+                    # ASL = camera y above water level
+                    asl = float(cam.y) - float(getattr(hp, "water_level", 0.0))
+                    span = 200.0
+                    top = asl + span
+                    bottom = asl - span
+
+                    # Vertical scale line
+                    left = 10
+                    right = gauge_w - 6
+                    scale_x = left + 6
+                    pygame.draw.line(gauge, (0, 220, 0), (scale_x, 8), (scale_x, gauge_h - 8), 2)
+
+                    def y_for_alt(a: float) -> int:
+                        t = (top - a) / (top - bottom) if top != bottom else 0.5
+                        return int(t * (gauge_h - 10) + 5)
+
+                    # ticks every 50 m with labels
+                    tick_step = 50.0
+                    first_tick = (int(bottom // tick_step) * tick_step)
+                    for alt in range(int(first_tick), int(top) + 1, int(tick_step)):
+                        ya = y_for_alt(float(alt))
+                        pygame.draw.line(gauge, (0, 220, 0), (scale_x - 8, ya), (scale_x + 6, ya), 2)
+                        lbl = font.render(f"{int(alt)}", True, (0, 220, 0))
+                        gauge.blit(lbl, (scale_x + 10, ya - lbl.get_height() // 2))
+
+                    # Center indicator for current altitude
+                    yc = y_for_alt(asl)
+                    pygame.draw.polygon(
+                        gauge,
+                        (0, 230, 0),
+                        [(right - 2, yc), (right - 14, yc - 6), (right - 14, yc + 6)],
+                    )
+                    cur_txt = font.render(f"{int(round(asl))}m", True, (0, 230, 0))
+                    gauge.blit(cur_txt, (right - cur_txt.get_width() - 6, yc - cur_txt.get_height() // 2))
+
+                    rgba, tw, th = _surface_to_rgba_bytes(gauge)
                     renderer.hud_update_rgba(rgba, tw, th)
+
                 renderer.draw_hud()
 
-                if now - last_log >= 1.0:
+                if debug and (now - last_log >= 1.0):
                     last_log = now
                     print(f"[flight] fps~{fps_est:.0f} upload={max_upload} near_chunks={len(world.near.chunks)} far_chunks={len(world.far.chunks)}")
 

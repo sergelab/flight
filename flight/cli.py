@@ -54,6 +54,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--fog-start", type=float, default=DEFAULT_FOG_START, help="fog start distance")
     p.add_argument("--fog-end", type=float, default=DEFAULT_FOG_END, help="fog end distance")
     p.add_argument("--debug", action="store_true", help="enable debug overlay (HUD + logs)")
+    p.add_argument("--hud", action="store_true", help="show compact HUD (height indicator)")
     p.add_argument("--target-fps", type=int, default=DEFAULT_TARGET_FPS, help="target FPS for adaptive streaming")
     p.add_argument(
         "--lod",
@@ -136,4 +137,5 @@ def main() -> None:
         pitch_gain=float(args.pitch_gain),
         pitch_max=float(args.pitch_max),
         pitch_smooth_k=float(args.pitch_smooth),
+        hud=bool(getattr(args, "hud", False)),
     )
